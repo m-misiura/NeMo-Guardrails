@@ -1,0 +1,38 @@
+FROM python:3.11-slim
+
+# System dependencies
+RUN apt-get update && apt-get install -y gcc g++ git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Poetry
+RUN pip install --no-cache-dir poetry
+
+# Copy project files
+COPY pyproject.toml poetry.lock* README.md ./
+COPY examples/ ./examples/
+COPY chat-ui/ ./chat-ui/
+COPY nemoguardrails/ ./nemoguardrails/
+COPY scripts/ ./scripts/
+RUN chmod +x ./scripts/entrypoint.sh
+
+# Create non-root user and set permissions
+RUN useradd --create-home guardrails && \
+    mkdir -p /app/config && \
+    mkdir -p /app/.cache/pypoetry && \
+    chown -R guardrails:guardrails /app
+
+USER guardrails
+
+# Set Poetry cache and virtualenvs path
+ENV POETRY_CACHE_DIR=/app/.cache/pypoetry
+ENV POETRY_VIRTUALENVS_PATH=/app/.cache/pypoetry/virtualenvs
+
+# Install all dependencies (main + extras) as non-root user
+RUN poetry install --no-interaction --no-ansi --all-extras
+RUN poetry run python -m spacy download en_core_web_lg
+
+EXPOSE 8000
+
+ENTRYPOINT ["./scripts/entrypoint.sh"]

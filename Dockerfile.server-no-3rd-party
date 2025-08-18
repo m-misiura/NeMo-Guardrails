@@ -1,0 +1,68 @@
+FROM registry.access.redhat.com/ubi9/ubi-minimal as builder
+
+RUN microdnf install -y python3.11 git gcc gcc-c++ python3.11-devel \
+    && ln -s /usr/bin/python3.11 /usr/bin/python3 \
+    && python3 -m ensurepip \
+    && microdnf clean all
+
+WORKDIR /app
+
+RUN pip3 install --no-cache-dir poetry
+
+COPY pyproject.toml poetry.lock* README.md ./
+COPY nemoguardrails/ ./nemoguardrails/
+COPY scripts/ ./scripts/
+COPY examples/ ./examples/
+COPY chat-ui/ ./chat-ui/
+
+# Remove third-party detectors
+RUN rm -rf \
+    nemoguardrails/library/activefence \
+    nemoguardrails/library/autoalign \
+    nemoguardrails/library/clavata \
+    nemoguardrails/library/cleanlab \
+    nemoguardrails/library/fiddler \
+    nemoguardrails/library/gcp_moderate_text \
+    nemoguardrails/library/patronusai \
+    nemoguardrails/library/privateai \
+    nemoguardrails/library/prompt_security
+
+RUN poetry config virtualenvs.in-project true \
+    && poetry install --no-interaction --no-ansi --extras sdd --extras jailbreak
+
+RUN poetry run python -m spacy download en_core_web_lg
+
+# Ensure CLI entrypoint is available in .venv
+RUN .venv/bin/pip install --editable .
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal
+
+RUN microdnf install -y python3.11 git gcc gcc-c++ python3.11-devel \
+    && ln -s /usr/bin/python3.11 /usr/bin/python3 \
+    && python3 -m ensurepip \
+    && microdnf clean all
+
+WORKDIR /app
+
+COPY --from=builder /app/pyproject.toml /app/poetry.lock* /app/README.md ./
+COPY --from=builder /app/nemoguardrails/ ./nemoguardrails/
+COPY --from=builder /app/scripts/ ./scripts/
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/examples/ ./examples/
+COPY --from=builder /app/chat-ui/ ./chat-ui/
+
+RUN chmod +x ./scripts/entrypoint.sh && \
+    microdnf remove -y gcc gcc-c++ python3.11-devel
+
+RUN useradd --create-home guardrails && \
+    mkdir -p /app/config && \
+    chown -R guardrails:guardrails /app
+
+USER guardrails
+
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+ENTRYPOINT ["./scripts/entrypoint.sh"]
