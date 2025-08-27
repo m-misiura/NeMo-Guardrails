@@ -1,0 +1,21 @@
+# Build time guardrails selection
+profiles:
+  opensource:
+    description: "Open source guardrails only"
+    include_closed_source: false
+
+  all:
+    description: "All available guardrails (open + closed source)"
+    include_closed_source: true
+
+# Define which guardrails are closed source (everything else is considered open source)
+closed_source_guardrails:
+  - "activefence"
+  - "cleanlab"
+  - "clavata"
+  - "privateai"
+  - "fiddler"
+  - "patronusai"
+  - "clavata"
+  - "prompt_security"
+  - "gcp_moderate_text"
