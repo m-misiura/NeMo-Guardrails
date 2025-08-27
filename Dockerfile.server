@@ -27,12 +27,22 @@ RUN chmod +x ./scripts/entrypoint.sh
 ARG GUARDRAILS_PROFILE=opensource
 RUN python3 ./scripts/filter_guardrails.py ./server-config.yaml $GUARDRAILS_PROFILE
 
-# Configure Poetry and install
+# Configure Poetry and install ONLY production dependencies
 ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_NO_INTERACTION=1
 
-RUN poetry install --no-ansi --all-extras && \
+# Install only specific extras needed for production (skip 'eval' which includes heavy deps)
+RUN poetry install --no-ansi --only=main --extras="sdd jailbreak openai nvidia tracing" && \
+    poetry run pip install "spacy>=3.4.4,<4.0.0" && \
     poetry run python -m spacy download en_core_web_lg
+
+# Clean up build dependencies and caches
+RUN dnf remove -y gcc gcc-c++ git && \
+    dnf clean all && \
+    pip cache purge && \
+    find /app -name "*.pyc" -delete && \
+    find /app -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true && \
+    rm -rf /root/.cache /tmp/*
 
 # Set permissions and switch user
 RUN chgrp -R 0 /app && chmod -R g+rwX /app
