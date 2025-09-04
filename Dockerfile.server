@@ -1,38 +1,44 @@
-FROM python:3.11-slim
+FROM registry.access.redhat.com/ubi9/python-312 as build
 
-# System dependencies
-RUN apt-get update && apt-get install -y gcc g++ git curl \
-    && rm -rf /var/lib/apt/lists/*
-
+USER 0
 WORKDIR /app
 
-# Install Poetry
-RUN pip install --no-cache-dir poetry
+RUN dnf install -y gcc gcc-c++ git && \
+    pip install --no-cache-dir poetry==1.8.2 pyyaml==6.0.2 && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf
 
-# Copy project files
 COPY pyproject.toml poetry.lock* README.md ./
+COPY nemoguardrails/ ./nemoguardrails/
 COPY examples/ ./examples/
 COPY chat-ui/ ./chat-ui/
-COPY nemoguardrails/ ./nemoguardrails/
-COPY scripts/ ./scripts/
+COPY scripts/provider-list.yaml ./scripts/
+COPY scripts/filter_guardrails.py ./scripts/
+COPY scripts/entrypoint.sh ./scripts/
 RUN chmod +x ./scripts/entrypoint.sh
 
-# Create non-root user and set permissions
-RUN useradd --create-home guardrails && \
-    mkdir -p /app/config && \
-    mkdir -p /app/.cache/pypoetry && \
-    chown -R guardrails:guardrails /app
+ARG GUARDRAILS_PROFILE=opensource
+RUN python3 ./scripts/filter_guardrails.py ./scripts/provider-list.yaml $GUARDRAILS_PROFILE
 
-USER guardrails
+ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_NO_INTERACTION=1
 
-# Set Poetry cache and virtualenvs path
-ENV POETRY_CACHE_DIR=/app/.cache/pypoetry
-ENV POETRY_VIRTUALENVS_PATH=/app/.cache/pypoetry/virtualenvs
+RUN poetry install --no-ansi --extras="sdd jailbreak openai nvidia tracing" && \
+    poetry run pip install "spacy>=3.4.4,<4.0.0" && \
+    poetry run python -m spacy download en_core_web_lg
 
-# Install all dependencies (main + extras) as non-root user
-RUN poetry install --no-interaction --no-ansi --all-extras
-RUN poetry run python -m spacy download en_core_web_lg
+FROM registry.access.redhat.com/ubi9/python-312
 
+USER 0
+WORKDIR /app
+
+COPY --from=build /app /app
+RUN rm -f /etc/security/namespace.conf /usr/lib64/security/pam_namespace.so || true && \
+    chgrp -R 0 /app && \
+    chmod -R g+rwX /app
+
+USER 1001
+
+ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
-
 ENTRYPOINT ["./scripts/entrypoint.sh"]
