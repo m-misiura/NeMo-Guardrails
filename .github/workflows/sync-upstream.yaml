@@ -2,7 +2,7 @@ name: Sync upstream develop
 
 on:
   schedule:
-    - cron: '0 3 * * *'   # Runs daily at 03:00 UTC
+    - cron: '0 3 * * *'
   workflow_dispatch:
 
 jobs:
@@ -11,8 +11,6 @@ jobs:
     steps:
       - name: Checkout your fork
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - name: Set up Git user
         run: |
