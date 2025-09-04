@@ -225,8 +225,7 @@ class TestLLMIsolation:
 
         isolated_llm = rails._create_action_llm_copy(original_llm, "test_action")
 
-        assert isolated_llm.model_kwargs == {}
-        assert isinstance(isolated_llm.model_kwargs, dict)
+        assert isolated_llm.model_kwargs is None
 
     def test_create_action_llm_copy_handles_copy_failure(self, rails_with_mock_llm):
         """Test that copy failures raise detailed error message."""
@@ -256,25 +255,45 @@ class TestLLMIsolation:
         """Test the full isolated LLM creation process."""
         rails = rails_with_mock_llm
 
+        # Mock rails configuration with flows
+        rails.config.rails = Mock()
+        rails.config.rails.input = Mock()
+        rails.config.rails.output = Mock()
+        rails.config.rails.input.flows = ["input_flow_1", "input_flow_2"]
+        rails.config.rails.output.flows = ["output_flow_1"]
+
         rails.runtime = Mock()
         rails.runtime.action_dispatcher = MockActionDispatcher()
         rails.runtime.registered_action_params = {}
         rails.runtime.register_action_param = Mock()
 
-        rails._create_isolated_llms_for_actions()
+        # Mock get_action_details_from_flow_id to return actions that need LLMs
+        def mock_get_action_details(flow_id, flows):
+            mapping = {
+                "input_flow_1": ("action_with_llm", {}),
+                "input_flow_2": ("generate_user_intent", {}),
+                "output_flow_1": ("self_check_output", {}),
+            }
+            return mapping.get(flow_id, ("unknown_action", {}))
 
-        expected_calls = [
+        with patch(
+            "nemoguardrails.rails.llm.llmrails.get_action_details_from_flow_id",
+            side_effect=mock_get_action_details,
+        ):
+            rails._create_isolated_llms_for_actions()
+
+        expected_llm_params = [
             "action_with_llm_llm",
             "generate_user_intent_llm",
             "self_check_output_llm",
         ]
 
-        actual_calls = [
+        registered_llm_params = [
             call[0][0] for call in rails.runtime.register_action_param.call_args_list
         ]
 
-        for expected_call in expected_calls:
-            assert expected_call in actual_calls
+        for expected_param in expected_llm_params:
+            assert expected_param in registered_llm_params
 
     def test_create_isolated_llms_skips_existing_specialized_llms(
         self, rails_with_mock_llm
@@ -282,22 +301,43 @@ class TestLLMIsolation:
         """Test that existing specialized LLMs are not overridden."""
         rails = rails_with_mock_llm
 
+        # Mock rails configuration with flows
+        rails.config.rails = Mock()
+        rails.config.rails.input = Mock()
+        rails.config.rails.output = Mock()
+        rails.config.rails.input.flows = ["input_flow_1", "input_flow_2"]
+        rails.config.rails.output.flows = ["output_flow_1"]
+
         rails.runtime = Mock()
         rails.runtime.action_dispatcher = MockActionDispatcher()
         rails.runtime.registered_action_params = {"self_check_output_llm": Mock()}
         rails.runtime.register_action_param = Mock()
 
-        rails._create_isolated_llms_for_actions()
+        # Mock get_action_details_from_flow_id to return actions that need LLMs
+        def mock_get_action_details(flow_id, flows):
+            mapping = {
+                "input_flow_1": ("action_with_llm", {}),
+                "input_flow_2": ("generate_user_intent", {}),
+                "output_flow_1": (
+                    "self_check_output",
+                    {},
+                ),  # This one already has an LLM
+            }
+            return mapping.get(flow_id, ("unknown_action", {}))
 
-        # verify self_check_output_llm was NOT re-registered
-        actual_calls = [
+        with patch(
+            "nemoguardrails.rails.llm.llmrails.get_action_details_from_flow_id",
+            side_effect=mock_get_action_details,
+        ):
+            rails._create_isolated_llms_for_actions()
+
+        registered_llm_params = [
             call[0][0] for call in rails.runtime.register_action_param.call_args_list
         ]
-        assert "self_check_output_llm" not in actual_calls
 
-        # but other actions should still get isolated LLMs
-        assert "action_with_llm_llm" in actual_calls
-        assert "generate_user_intent_llm" in actual_calls
+        assert "self_check_output_llm" not in registered_llm_params
+        assert "action_with_llm_llm" in registered_llm_params
+        assert "generate_user_intent_llm" in registered_llm_params
 
     def test_create_isolated_llms_handles_no_main_llm(self, mock_config):
         """Test graceful handling when no main LLM is available."""
@@ -412,3 +452,128 @@ class TestLLMIsolationEdgeCases:
             assert action_name in actions_needing_llms
         else:
             assert action_name not in actions_needing_llms
+
+    def test_create_isolated_llms_for_configured_actions_only(
+        self, rails_with_mock_llm
+    ):
+        """Test that isolated LLMs are created only for actions configured in rails flows."""
+        rails = rails_with_mock_llm
+
+        rails.config.rails = Mock()
+        rails.config.rails.input = Mock()
+        rails.config.rails.output = Mock()
+        rails.config.rails.input.flows = [
+            "input_flow_1",
+            "input_flow_2",
+            "input_flow_3",
+        ]
+        rails.config.rails.output.flows = ["output_flow_1", "output_flow_2"]
+
+        rails.runtime = Mock()
+        rails.runtime.action_dispatcher = MockActionDispatcher()
+        rails.runtime.registered_action_params = {}
+        rails.runtime.register_action_param = Mock()
+
+        def mock_get_action_details(flow_id, flows):
+            mapping = {
+                "input_flow_1": ("action_with_llm", {}),
+                "input_flow_2": ("action_without_llm", {}),
+                "input_flow_3": ("self_check_output", {}),
+                "output_flow_1": ("generate_user_intent", {}),
+                "output_flow_2": ("non_configured_action", {}),
+            }
+            return mapping.get(flow_id, ("unknown_action", {}))
+
+        with patch(
+            "nemoguardrails.rails.llm.llmrails.get_action_details_from_flow_id",
+            side_effect=mock_get_action_details,
+        ):
+            rails._create_isolated_llms_for_actions()
+
+        registered_llm_params = [
+            call[0][0] for call in rails.runtime.register_action_param.call_args_list
+        ]
+
+        expected_isolated_llm_params = [
+            "action_with_llm_llm",
+            "generate_user_intent_llm",
+            "self_check_output_llm",
+        ]
+
+        for expected_param in expected_isolated_llm_params:
+            assert (
+                expected_param in registered_llm_params
+            ), f"Expected {expected_param} to be registered as action param"
+
+        assert "action_without_llm_llm" not in registered_llm_params
+        assert "non_configured_action_llm" not in registered_llm_params
+
+        assert len(registered_llm_params) == 3, (
+            f"Should only create isolated LLMs for actions from config flows that need LLMs. "
+            f"Got {registered_llm_params}"
+        )
+
+    def test_create_isolated_llms_handles_empty_rails_config(self, rails_with_mock_llm):
+        """Test that the method handles empty rails configuration gracefully."""
+        rails = rails_with_mock_llm
+
+        rails.config.rails = Mock()
+        rails.config.rails.input = Mock()
+        rails.config.rails.output = Mock()
+        rails.config.rails.input.flows = []
+        rails.config.rails.output.flows = []
+
+        rails.runtime = Mock()
+        rails.runtime.action_dispatcher = MockActionDispatcher()
+        rails.runtime.registered_action_params = {}
+        rails.runtime.register_action_param = Mock()
+
+        with patch(
+            "nemoguardrails.rails.llm.llmrails.get_action_details_from_flow_id"
+        ) as mock_get_action:
+            rails._create_isolated_llms_for_actions()
+
+        mock_get_action.assert_not_called()
+
+        rails.runtime.register_action_param.assert_not_called()
+
+    def test_llm_isolation_timing_with_empty_flows(self, rails_with_mock_llm, caplog):
+        """Test that LLM isolation handles empty flows gracefully during initialization.
+
+        This test reproduces the timing issue where _create_isolated_llms_for_actions()
+        was called before flows were properly loaded. Before the fix, this would fail
+        when trying to resolve rail flow IDs against an empty flows list, causing
+        LLM isolation to fail silently with a warning log.
+        """
+        rails = rails_with_mock_llm
+
+        rails.llm = MockLLM(model_kwargs={}, temperature=0.7)
+
+        # simulate the problematic scenario: rail flows defined but config.flows empty
+        rails.config.rails = Mock()
+        rails.config.rails.input = Mock()
+        rails.config.rails.output = Mock()
+        rails.config.rails.input.flows = [
+            "content safety check input $model=content_safety"
+        ]
+        rails.config.rails.output.flows = [
+            "content safety check output $model=content_safety"
+        ]
+        rails.config.flows = []  # Empty flows list (timing issue scenario)
+
+        rails.runtime = Mock()
+        rails.runtime.action_dispatcher = MockActionDispatcher()
+        rails.runtime.registered_action_params = {}
+        rails.runtime.register_action_param = Mock()
+
+        # before the fix, this would log a warning about failing to create isolated LLMs
+        # after the fix, it should handle empty flows gracefully without the warning
+        rails._create_isolated_llms_for_actions()
+
+        warning_messages = [
+            record.message for record in caplog.records if record.levelname == "WARNING"
+        ]
+        assert not any(
+            "Failed to create isolated LLMs for actions" in msg
+            for msg in warning_messages
+        ), f"Fix failed: Warning still logged: {warning_messages}"

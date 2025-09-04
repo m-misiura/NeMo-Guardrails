@@ -358,11 +358,28 @@ class LogAdapterConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class SpanFormat(str, Enum):
+    legacy = "legacy"
+    opentelemetry = "opentelemetry"
+
+
 class TracingConfig(BaseModel):
     enabled: bool = False
     adapters: List[LogAdapterConfig] = Field(
         default_factory=lambda: [LogAdapterConfig()],
         description="The list of tracing adapters to use. If not specified, the default adapters are used.",
+    )
+    span_format: str = Field(
+        default=SpanFormat.opentelemetry,
+        description="The span format to use. Options are 'legacy' (simple metrics) or 'opentelemetry' (OpenTelemetry semantic conventions).",
+    )
+    enable_content_capture: bool = Field(
+        default=False,
+        description=(
+            "Capture prompts and responses (user/assistant/tool message content) in tracing/telemetry events. "
+            "Disabled by default for privacy and alignment with OpenTelemetry GenAI semantic conventions. "
+            "WARNING: Enabling this may include PII and sensitive data in your telemetry backend."
+        ),
     )
 
 
@@ -757,6 +774,62 @@ class ClavataRailConfig(BaseModel):
     )
 
 
+class PangeaRailOptions(BaseModel):
+    """Configuration data for the Pangea AI Guard API"""
+
+    recipe: str = Field(
+        description="""Recipe key of a configuration of data types and settings defined in the Pangea User Console. It
+        specifies the rules that are to be applied to the text, such as defang malicious URLs."""
+    )
+
+
+class PangeaRailConfig(BaseModel):
+    """Configuration data for the Pangea AI Guard API"""
+
+    input: Optional[PangeaRailOptions] = Field(
+        default=None,
+        description="Pangea configuration for an Input Guardrail",
+    )
+    output: Optional[PangeaRailOptions] = Field(
+        default=None,
+        description="Pangea configuration for an Output Guardrail",
+    )
+
+
+class GuardrailsAIValidatorConfig(BaseModel):
+    """Configuration for a single Guardrails AI validator."""
+
+    name: str = Field(
+        description="Unique identifier or import path for the Guardrails AI validator (e.g., 'toxic_language', 'pii', 'regex_match', or 'guardrails/competitor_check')."
+    )
+
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Parameters to pass to the validator during initialization (e.g., threshold, regex pattern).",
+    )
+
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Metadata to pass to the validator during validation (e.g., valid_topics, context).",
+    )
+
+
+class GuardrailsAIRailConfig(BaseModel):
+    """Configuration data for Guardrails AI integration."""
+
+    validators: List[GuardrailsAIValidatorConfig] = Field(
+        default_factory=list,
+        description="List of Guardrails AI validators to apply. Each validator can have its own parameters and metadata.",
+    )
+
+    def get_validator_config(self, name: str) -> Optional[GuardrailsAIValidatorConfig]:
+        """Get a specific validator configuration by name."""
+        for _validator in self.validators:
+            if _validator.name == name:
+                return _validator
+        return None
+
+
 class RailsConfigData(BaseModel):
     """Configuration data for specific rails that are supported out-of-the-box."""
 
@@ -803,6 +876,16 @@ class RailsConfigData(BaseModel):
     clavata: Optional[ClavataRailConfig] = Field(
         default_factory=ClavataRailConfig,
         description="Configuration for Clavata.",
+    )
+
+    pangea: Optional[PangeaRailConfig] = Field(
+        default_factory=PangeaRailConfig,
+        description="Configuration for Pangea.",
+    )
+
+    guardrails_ai: Optional[GuardrailsAIRailConfig] = Field(
+        default_factory=GuardrailsAIRailConfig,
+        description="Configuration for Guardrails AI validators.",
     )
 
 

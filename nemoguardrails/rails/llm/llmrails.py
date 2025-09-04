@@ -73,7 +73,10 @@ from nemoguardrails.rails.llm.options import (
     GenerationOptions,
     GenerationResponse,
 )
-from nemoguardrails.rails.llm.utils import get_history_cache_key
+from nemoguardrails.rails.llm.utils import (
+    get_action_details_from_flow_id,
+    get_history_cache_key,
+)
 from nemoguardrails.streaming import END_OF_STREAM, StreamingHandler
 from nemoguardrails.utils import (
     extract_error_json,
@@ -241,6 +244,8 @@ class LLMRails:
             from nemoguardrails.tracing import create_log_adapters
 
             self._log_adapters = create_log_adapters(config.tracing)
+        else:
+            self._log_adapters = None
 
         # We run some additional checks on the config
         self._validate_config()
@@ -279,6 +284,8 @@ class LLMRails:
         # We also register the kb as a parameter that can be passed to actions.
         self.runtime.register_action_param("kb", self.kb)
 
+        # detect actions that need isolated LLM instances and create them
+        self._create_isolated_llms_for_actions()
         # Reference to the general ExplainInfo object.
         self.explain_info = None
 
@@ -502,9 +509,6 @@ class LLMRails:
 
         self.runtime.register_action_param("llms", llms)
 
-        # detect actions that need isolated LLM instances and create them
-        self._create_isolated_llms_for_actions()
-
     def _create_isolated_llms_for_actions(self):
         """Create isolated LLM copies for all actions that accept 'llm' parameter."""
         if not self.llm:
@@ -520,7 +524,36 @@ class LLMRails:
             )
 
             created_count = 0
-            for action_name in actions_needing_llms:
+
+            configured_actions_names = []
+            try:
+                if self.config.flows:
+                    get_action_details = partial(
+                        get_action_details_from_flow_id, flows=self.config.flows
+                    )
+                    for flow_id in self.config.rails.input.flows:
+                        action_name, _ = get_action_details(flow_id)
+                        configured_actions_names.append(action_name)
+                    for flow_id in self.config.rails.output.flows:
+                        action_name, _ = get_action_details(flow_id)
+                        configured_actions_names.append(action_name)
+                else:
+                    # for configurations without flow definitions, use all actions that need LLMs
+                    log.info(
+                        "No flow definitions found, creating isolated LLMs for all actions requiring them"
+                    )
+                    configured_actions_names = list(actions_needing_llms)
+            except Exception as e:
+                # if flow matching fails, fall back to all actions that need LLMs
+                log.info(
+                    "Flow matching failed (%s), creating isolated LLMs for all actions requiring them",
+                    e,
+                )
+                configured_actions_names = list(actions_needing_llms)
+
+            for action_name in configured_actions_names:
+                if action_name not in actions_needing_llms:
+                    continue
                 if f"{action_name}_llm" not in self.runtime.registered_action_params:
                     isolated_llm = self._create_action_llm_copy(self.llm, action_name)
                     if isolated_llm:
@@ -593,8 +626,6 @@ class LLMRails:
                 and isolated_llm.model_kwargs is not None
             ):
                 isolated_llm.model_kwargs = isolated_llm.model_kwargs.copy()
-            else:
-                isolated_llm.model_kwargs = {}
 
             log.debug(
                 "Successfully created isolated LLM copy for action: %s", action_name
@@ -1152,9 +1183,19 @@ class LLMRails:
                 # lazy import to avoid circular dependency
                 from nemoguardrails.tracing import Tracer
 
-                # Create a Tracer instance with instantiated adapters
+                span_format = getattr(
+                    self.config.tracing, "span_format", "opentelemetry"
+                )
+                enable_content_capture = getattr(
+                    self.config.tracing, "enable_content_capture", False
+                )
+                # Create a Tracer instance with instantiated adapters and span configuration
                 tracer = Tracer(
-                    input=messages, response=res, adapters=self._log_adapters
+                    input=messages,
+                    response=res,
+                    adapters=self._log_adapters,
+                    span_format=span_format,
+                    enable_content_capture=enable_content_capture,
                 )
                 await tracer.export_async()
 
@@ -1590,7 +1631,7 @@ class LLMRails:
         output_rails_flows_id = self.config.rails.output.flows
         stream_first = stream_first or output_rails_streaming_config.stream_first
         get_action_details = partial(
-            _get_action_details_from_flow_id, flows=self.config.flows
+            get_action_details_from_flow_id, flows=self.config.flows
         )
 
         parallel_mode = getattr(self.config.rails.output, "parallel", False)
@@ -1746,58 +1787,3 @@ class LLMRails:
                 # yield the individual chunks directly from the buffer strategy
                 for chunk in user_output_chunks:
                     yield chunk
-
-
-def _get_action_details_from_flow_id(
-    flow_id: str,
-    flows: List[Union[Dict, Any]],
-    prefixes: Optional[List[str]] = None,
-) -> Tuple[str, Any]:
-    """Get the action name and parameters from the flow id.
-
-    First, try to find an exact match.
-    If not found, then if the provided flow_id starts with one of the special prefixes,
-    return the first flow whose id starts with that same prefix.
-    """
-
-    supported_prefixes = [
-        "content safety check output",
-        "topic safety check output",
-    ]
-    if prefixes:
-        supported_prefixes.extend(prefixes)
-
-    candidate_flow = None
-
-    for flow in flows:
-        # If exact match, use it
-        if flow["id"] == flow_id:
-            candidate_flow = flow
-            break
-
-        # If no exact match, check if both the provided flow_id and this flow's id share a special prefix
-        for prefix in supported_prefixes:
-            if flow_id.startswith(prefix) and flow["id"].startswith(prefix):
-                candidate_flow = flow
-                # We don't break immediately here because an exact match would have been preferred,
-                # but since we're in the else branch it's fine to choose the first matching candidate.
-                # TODO:we should avoid having multiple matchin prefixes
-                break
-
-        if candidate_flow is not None:
-            break
-
-    if candidate_flow is None:
-        raise ValueError(f"No action found for flow_id: {flow_id}")
-
-    # we have identified a candidate, look for the run_action element.
-    for element in candidate_flow["elements"]:
-        if (
-            element["_type"] == "run_action"
-            and element["_source_mapping"]["filename"].endswith(".co")
-            and "execute" in element["_source_mapping"]["line_text"]
-            and "action_name" in element
-        ):
-            return element["action_name"], element["action_params"]
-
-    raise ValueError(f"No run_action element found for flow_id: {flow_id}")
