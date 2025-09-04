@@ -3,10 +3,10 @@ FROM registry.access.redhat.com/ubi9/python-312 as build
 USER 0
 WORKDIR /app
 
-RUN dnf update -y && \
-    dnf install -y gcc gcc-c++ git && \
+RUN dnf install -y gcc gcc-c++ git && \
+    pip install --no-cache-dir poetry==1.8.2 pyyaml==6.0.2 && \
     dnf clean all && \
-    pip install --no-cache-dir poetry==2.1.4 pyyaml==6.0.2
+    rm -rf /var/cache/dnf
 
 COPY pyproject.toml poetry.lock* README.md ./
 COPY nemoguardrails/ ./nemoguardrails/
@@ -23,7 +23,7 @@ RUN python3 ./scripts/filter_guardrails.py ./server-config.yaml $GUARDRAILS_PROF
 ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_NO_INTERACTION=1
 
-RUN poetry install --no-ansi --only=main --extras="sdd jailbreak openai nvidia tracing" && \
+RUN poetry install --no-ansi --extras="sdd jailbreak openai nvidia tracing" && \
     poetry run pip install "spacy>=3.4.4,<4.0.0" && \
     poetry run python -m spacy download en_core_web_lg
 
@@ -32,10 +32,11 @@ FROM registry.access.redhat.com/ubi9/python-312
 USER 0
 WORKDIR /app
 
-# Copy only what is needed for runtime
 COPY --from=build /app /app
+RUN rm -f /etc/security/namespace.conf /usr/lib64/security/pam_namespace.so || true && \
+    chgrp -R 0 /app && \
+    chmod -R g+rwX /app
 
-RUN chgrp -R 0 /app && chmod -R g+rwX /app
 USER 1001
 
 ENV PATH="/app/.venv/bin:$PATH"

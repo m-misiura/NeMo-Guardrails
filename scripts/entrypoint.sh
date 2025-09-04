@@ -23,4 +23,5 @@ echo "✅ Configuration validated. Starting server..."
 exec /app/.venv/bin/nemoguardrails server \
   --config "/app/config" \
   --port "$PORT" \
-  --default-config-id "$CONFIG_ID"
+  --default-config-id "$CONFIG_ID" \
+  --disable-chat-ui
