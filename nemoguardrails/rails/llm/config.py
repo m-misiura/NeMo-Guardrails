@@ -974,6 +974,8 @@ class RailsConfigData(BaseModel):
         description="Configuration for Cisco AI Defense.",
     )
 
+    model_config = ConfigDict(extra="allow")
+
 
 class Rails(BaseModel):
     """Configuration of specific rails."""
