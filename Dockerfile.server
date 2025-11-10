@@ -3,10 +3,9 @@ FROM registry.access.redhat.com/ubi9/python-312:latest as build
 USER 0
 WORKDIR /app
 
-ARG POETRY_VERSION=1.8.2
-ARG PYYAML_VERSION=6.0.2
+ARG POETRY_VERSION=2.2.1
+ARG PYYAML_VERSION=6.0.3
 
-# Install build deps with size optimization flags
 RUN dnf install -y --nodocs --setopt=install_weak_deps=False \
         gcc \
         gcc-c++ \
@@ -37,13 +36,10 @@ ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
     NLTK_DATA=/app/.cache/nltk_data \
     FASTEMBED_CACHE_PATH=/app/.cache/fastembed
 
-# Install deps (no dev deps for smaller image)
-# Clear cache during install to avoid filling up container storage
 RUN poetry install --no-ansi --only main --extras="sdd jailbreak openai nvidia tracing models" && \
     poetry cache clear --all pypi && \
     rm -rf /root/.cache/pip /tmp/* /var/tmp/* /opt/app-root/src/.cache/pypoetry
 
-# Download models and clean up in SAME layer (critical for size!)
 RUN set -ex && \
     poetry run python -m spacy download en_core_web_lg && \
     GUARDRAILS_PROFILE=$GUARDRAILS_PROFILE poetry run python ./scripts/pre_download_required_models.py && \
