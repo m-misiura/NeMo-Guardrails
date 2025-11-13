@@ -87,5 +87,10 @@
 
     // FLAKE8
     "flake8.args": ["--max-line-length=120"],
-    "python.formatting.provider": "none"
+    "python.formatting.provider": "none",
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#28311A",
+        "titleBar.activeBackground": "#384424",
+        "titleBar.activeForeground": "#F9FAF6"
+    }
 }

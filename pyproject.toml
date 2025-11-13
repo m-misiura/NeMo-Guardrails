@@ -106,6 +106,7 @@ google-cloud-language = { version = ">=2.14.0", optional = true }
 yara-python = { version = "^4.5.1", optional = true }
 
 # models - optional dependencies for various embedding and NLP models
+torch = { version = ">=2.0.0", optional = true, source = "pytorch-cpu" }
 spacy = { version = ">=3.4.4,<4.0.0,!=3.7.0", python = "<3.14", optional = true }
 nltk = { version = ">=3.8", optional = true }
 sentence-transformers = { version = ">=2.2.0", optional = true }
@@ -119,7 +120,7 @@ gcp = ["google-cloud-language"]
 tracing = ["opentelemetry-api", "aiofiles"]
 nvidia = ["langchain-nvidia-ai-endpoints"]
 jailbreak = ["yara-python"]
-models = ["spacy", "nltk", "sentence-transformers", "einops"]
+models = ["torch", "spacy", "nltk", "sentence-transformers", "einops"]
 # Poetry does not support recursive dependencies, so we need to add all the dependencies here.
 # I also support their decision. There is no PEP for recursive dependencies, but it has been supported in pip since version 21.2.
 # It is here for backward compatibility.
@@ -135,6 +136,7 @@ all = [
   "aiofiles",
   "langchain-nvidia-ai-endpoints",
   "yara-python",
+  "torch",
   "spacy",
   "nltk",
   "sentence-transformers",
@@ -203,6 +205,11 @@ log-level = "DEBUG"
 # There are some race conditions with how the logging streams are closed in the teardown
 # phase, which will cause tests to fail or "magically" ignored.
 log_cli = "False"
+
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
 
 [build-system]
 requires = ["poetry-core>=1.0.0,<2.0.0"]

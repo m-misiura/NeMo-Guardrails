@@ -36,18 +36,13 @@ ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
     NLTK_DATA=/app/.cache/nltk_data \
     FASTEMBED_CACHE_PATH=/app/.cache/fastembed
 
+# Poetry will install CPU-only torch from pytorch-cpu source defined in pyproject.toml
 RUN poetry install --no-ansi --only main --extras="sdd jailbreak openai nvidia tracing models" && \
     poetry cache clear --all pypi && \
     rm -rf /root/.cache/pip /tmp/* /var/tmp/* /opt/app-root/src/.cache/pypoetry
 
-RUN set -ex && \
-    poetry run python -m spacy download en_core_web_lg && \
-    GUARDRAILS_PROFILE=$GUARDRAILS_PROFILE poetry run python ./scripts/pre_download_required_models.py && \
-    find /app/.cache -type f -name "*.pyc" -delete && \
-    find /app/.cache -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-    find /app/.cache -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true && \
-    poetry cache clear --all pypi && \
-    rm -rf /root/.cache/pip /tmp/* /var/tmp/*
+RUN mkdir -p /app/.cache/huggingface /app/.cache/transformers /app/.cache/sentence_transformers /app/.cache/nltk_data /app/.cache/fastembed && \
+    echo "Model cache directories created - models will be loaded from PVC at runtime"
 
 FROM registry.access.redhat.com/ubi9/python-312:latest
 

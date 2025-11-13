@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Pre-download all models required by NeMo Guardrails.
 """
@@ -95,19 +110,42 @@ def download_fastembed_models(models):
 
 def download_huggingface_models(models):
     try:
-        from transformers import AutoModel
+        from transformers import AutoModel, AutoTokenizer
     except ImportError:
         logging.warning("Transformers not available - skipping HuggingFace models")
         return
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        has_sentence_transformers = True
+    except ImportError:
+        has_sentence_transformers = False
     for model_name in models:
         if "/" not in model_name:
             logging.info(f"Skipping non-HuggingFace model name: {model_name}")
             continue
         try:
-            AutoModel.from_pretrained(model_name, trust_remote_code=True)
+            logging.info(f"Downloading HuggingFace model: {model_name}")
+            AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+            AutoModel.from_pretrained(
+                model_name,
+                trust_remote_code=True,
+                local_files_only=False,
+            )
             logging.info(f"Downloaded HuggingFace model: {model_name}")
         except Exception as e:
-            logging.warning(f"Failed to download HuggingFace model {model_name}: {e}")
+            # Some models (like Snowflake arctic-embed) work better with SentenceTransformer
+            if has_sentence_transformers and "snowflake" in model_name.lower():
+                try:
+                    logging.info(f"Retrying with SentenceTransformer: {model_name}")
+                    SentenceTransformer(model_name, trust_remote_code=True)
+                    logging.info(f"✓ Downloaded via SentenceTransformer: {model_name}")
+                except Exception as e2:
+                    logging.warning(f"Failed to download {model_name}: {e2}")
+            else:
+                logging.warning(
+                    f"Failed to download HuggingFace model {model_name}: {e}"
+                )
 
 
 def download_nltk_data():
