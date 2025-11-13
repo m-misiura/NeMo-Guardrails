@@ -1,0 +1,61 @@
+FROM registry.access.redhat.com/ubi9/python-312:latest as model-builder
+
+USER 0
+WORKDIR /app
+
+ARG POETRY_VERSION=2.2.1
+ARG PYYAML_VERSION=6.0.3
+ARG GUARDRAILS_PROFILE=opensource
+
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False \
+        gcc \
+        gcc-c++ \
+        git && \
+    pip install --no-cache-dir \
+        poetry==${POETRY_VERSION} \
+        pyyaml==${PYYAML_VERSION} && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+
+COPY pyproject.toml poetry.lock README.md ./
+COPY nemoguardrails/ ./nemoguardrails/
+COPY scripts/ ./scripts/
+
+RUN python3 ./scripts/filter_guardrails.py ./scripts/provider-list.yaml $GUARDRAILS_PROFILE
+
+ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_CREATE=true \
+    POETRY_NO_CACHE=1
+
+ENV HF_HOME=/app/.cache/huggingface \
+    TRANSFORMERS_CACHE=/app/.cache/transformers \
+    SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers \
+    NLTK_DATA=/app/.cache/nltk_data \
+    FASTEMBED_CACHE_PATH=/app/.cache/fastembed
+
+RUN poetry install --no-ansi --only main --extras="models" && \
+    poetry cache clear --all pypi && \
+    rm -rf /root/.cache/pip /tmp/* /var/tmp/* /opt/app-root/src/.cache/pypoetry
+
+RUN set -ex && \
+    GUARDRAILS_PROFILE=$GUARDRAILS_PROFILE poetry run python ./scripts/pre_download_required_models.py && \
+    find /app/.cache -type f -name "*.pyc" -delete && \
+    find /app/.cache -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/.cache -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true && \
+    echo "Models downloaded:" && \
+    du -sh /app/.cache/* || true
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+
+USER 0
+WORKDIR /models
+
+COPY --from=model-builder /app/.cache /models/.cache
+
+RUN chgrp -R 0 /models && \
+    chmod -R g=u /models
+
+USER 1001
+
+CMD ["sh", "-c", "echo 'Models image ready. Use as init container to copy to PVC.' && ls -lh /models/.cache"]
