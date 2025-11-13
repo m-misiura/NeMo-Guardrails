@@ -6,19 +6,8 @@ PORT="${PORT:-${2:-8000}}"
 
 CONFIG_DIR="/app/config/${CONFIG_ID}"
 
-echo "🚀 Starting NeMo Guardrails with config from: $CONFIG_DIR (port: $PORT)"
-
-# Check if models are available (either baked in or from PVC)
-CACHE_DIR="${HF_HOME:-/app/.cache/huggingface}"
-if [[ ! -d "$CACHE_DIR" ]] || [[ -z "$(ls -A $CACHE_DIR 2>/dev/null)" ]]; then
-  echo "⚠️  WARNING: Model cache appears empty at $CACHE_DIR"
-  echo "   Models should be either:"
-  echo "   1. Baked into the image (build with --build-arg DOWNLOAD_MODELS=true), or"
-  echo "   2. Provided via PVC mounted at /app/.cache (using init container)"
-  echo ""
-  echo "   The application may fail if required models are not available."
-  echo ""
-fi
+echo "🚀 Starting NeMo Guardrails on port $PORT"
+echo "📦 Model cache: /app/.cache"
 
 # Validate config exists
 if [[ ! -f "$CONFIG_DIR/config.yaml" ]]; then
