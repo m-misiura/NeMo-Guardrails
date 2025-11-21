@@ -41,18 +41,29 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
 
-      - name: Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: "fs"
           scan-ref: "."
           format: "sarif"
-          output: "trivy-results.sarif"
+          output: "trivy-fs-results.sarif"
           severity: "CRITICAL,HIGH,MEDIUM,LOW"
           exit-code: "0"
 
+      - name: Run Trivy dependency scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-deps-results.sarif"
+          severity: "CRITICAL,HIGH,MEDIUM,LOW"
+          scanners: "vuln"
+          exit-code: "0"
+
       - name: Check for critical and high vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: "fs"
           scan-ref: "."
@@ -60,12 +71,19 @@ jobs:
           severity: "CRITICAL,HIGH"
           exit-code: "1"
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload Trivy filesystem scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && github.event_name == 'pull_request' && github.base_ref == 'develop'
         with:
-          sarif_file: "trivy-results.sarif"
-          category: "trivy-security-scan"
+          sarif_file: "trivy-fs-results.sarif"
+          category: "trivy-filesystem"
+
+      - name: Upload Trivy dependency scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && github.event_name == 'pull_request' && github.base_ref == 'develop'
+        with:
+          sarif_file: "trivy-deps-results.sarif"
+          category: "trivy-dependencies"
 
   bandit-scan:
     name: Bandit
@@ -99,10 +117,10 @@ jobs:
         run: poetry run pip install bandit[sarif]
 
       - name: Run Bandit Security Scan
-        uses: PyCQA/bandit-action@67a458d90fa11fb1463e91e7f4c8f068b5863c7f
+        uses: PyCQA/bandit-action@v1
         with:
           targets: "."
-          configfile: ".bandit.yaml"
+          exclude: "tests"
 
       - name: Upload SARIF results to Security tab
         if: github.ref == 'refs/heads/develop'
@@ -110,7 +128,6 @@ jobs:
         with:
           sarif_file: results.sarif
           category: bandit-security-scan
-        continue-on-error: true
 
       - name: Upload SARIF as artifact
         uses: actions/upload-artifact@v4
