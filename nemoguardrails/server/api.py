@@ -22,7 +22,7 @@ import re
 import time
 import warnings
 from contextlib import asynccontextmanager
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +33,9 @@ from starlette.staticfiles import StaticFiles
 from nemoguardrails import LLMRails, RailsConfig, utils
 from nemoguardrails.rails.llm.options import (
     GenerationLog,
+    GenerationLogOptions,
     GenerationOptions,
+    GenerationRailsOptions,
     GenerationResponse,
 )
 from nemoguardrails.server.datastore.datastore import DataStore
@@ -274,6 +276,48 @@ class ResponseBody(BaseModel):
     )
 
 
+class GuardrailCheckRequestBody(BaseModel):
+    """Request body for the /v1/guardrail/checks endpoint."""
+
+    model: str = Field(description="The model to use for guardrail checks.")
+    messages: List[dict] = Field(
+        description="The list of messages to check against guardrails."
+    )
+    guardrails: dict = Field(
+        description="Guardrail configuration. Can contain 'config_id' to reference an existing config, "
+        "or 'config' with an inline RailsConfig dict."
+    )
+    stream: Optional[bool] = Field(
+        default=False,
+        description="Whether to stream the response (not used for checks).",
+    )
+    # Additional LLM parameters
+    temperature: Optional[float] = Field(default=None)
+    top_p: Optional[float] = Field(default=None)
+    max_tokens: Optional[int] = Field(default=None)
+
+
+class RailStatus(BaseModel):
+    """Status of an individual rail."""
+
+    status: str = Field(description="Status of the rail: 'success' or 'blocked'")
+
+
+class GuardrailCheckResponseBody(BaseModel):
+    """Response body for the /v1/guardrail/checks endpoint."""
+
+    status: str = Field(
+        description="Overall status: 'success' if all rails passed, 'blocked' if any rail blocked, 'error' for system errors."
+    )
+    rails_status: Dict[str, RailStatus] = Field(
+        description="Status of each individual rail that was executed."
+    )
+    guardrails_data: Optional[dict] = Field(
+        default=None,
+        description="Additional data from guardrail execution including logs and stats.",
+    )
+
+
 @app.get(
     "/v1/rails/configs",
     summary="Get List of available rails configurations.",
@@ -304,8 +348,8 @@ async def get_rails_configs():
 
 
 # One instance of LLMRails per config id
-llm_rails_instances: dict[str, LLMRails] = {}
-llm_rails_events_history_cache: dict[str, dict] = {}
+llm_rails_instances: Dict[str, LLMRails] = {}
+llm_rails_events_history_cache: Dict[str, Dict] = {}
 
 
 def _generate_cache_key(config_ids: List[str]) -> str:
@@ -499,6 +543,199 @@ async def chat_completion(body: RequestBody, request: Request):
         return ResponseBody(
             messages=[{"role": "assistant", "content": "Internal server error."}]
         )
+
+
+def _create_error_response(
+    error: str, details: Optional[str] = None
+) -> GuardrailCheckResponseBody:
+    """Create a standardized error response."""
+    guardrails_data = {"log": {"activated_rails": [], "stats": {}}, "error": error}
+    if details:
+        guardrails_data["details"] = details
+    return GuardrailCheckResponseBody(
+        status="error", rails_status={}, guardrails_data=guardrails_data
+    )
+
+
+def _load_rails(
+    config_id: Optional[str] = None, inline_config: Optional[dict] = None
+) -> LLMRails:
+    """Load rails from either config_id or inline config."""
+    if inline_config:
+        rails_config = (
+            RailsConfig.from_content(yaml_content=inline_config)
+            if isinstance(inline_config, str)
+            else RailsConfig.from_content(config=inline_config)
+        )
+        return LLMRails(config=rails_config, verbose=True)
+
+    # config_id must be provided if inline_config is not
+    if not config_id:
+        raise ValueError("Either config_id or inline_config must be provided")
+
+    return _get_rails([config_id])
+
+
+def _create_check_options(
+    run_input: bool, run_output: bool, llm_params: Optional[dict] = None
+) -> GenerationOptions:
+    """Create GenerationOptions for guardrail checks."""
+    options = GenerationOptions(
+        rails=GenerationRailsOptions(
+            input=run_input,
+            output=run_output,
+            retrieval=False,
+            dialog=False,
+            tool_input=False,
+            tool_output=False,
+        ),
+        log=GenerationLogOptions(
+            activated_rails=True, internal_events=True, llm_calls=True
+        ),
+    )
+    if llm_params:
+        options.llm_params = llm_params
+    return options
+
+
+@app.post(
+    "/v1/guardrail/checks",
+    response_model=GuardrailCheckResponseBody,
+)
+async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
+    """Check messages against guardrails without generating LLM responses.
+
+    This endpoint runs input/output rails on the provided messages and returns
+    the status of each rail. It does not generate new content, only validates
+    existing messages against configured guardrails.
+    """
+    log.info("Got guardrail check request")
+    for logger in registered_loggers:
+        asyncio.get_event_loop().create_task(
+            logger({"endpoint": "/v1/guardrail/checks", "body": body.json()})
+        )
+
+    api_request_headers.set(request.headers)
+
+    try:
+        # Validate request
+        if not body.messages:
+            return _create_error_response("Messages list cannot be empty.")
+
+        config_id = body.guardrails.get("config_id")
+        inline_config = body.guardrails.get("config")
+
+        if config_id and inline_config:
+            return _create_error_response(
+                "Only one of 'config_id' or 'config' should be provided in guardrails field."
+            )
+        if not (config_id or inline_config):
+            return _create_error_response(
+                "Either 'config_id' or 'config' must be provided in guardrails field."
+            )
+
+        # Load rails configuration
+        try:
+            llm_rails = _load_rails(config_id, inline_config)
+        except ValueError as ex:
+            log.exception(ex)
+            return _create_error_response(
+                f"Could not load the {config_id} guardrails configuration.", str(ex)
+            )
+        except Exception as ex:
+            log.exception(ex)
+            return _create_error_response(
+                "Failed to parse inline guardrail configuration.", str(ex)
+            )
+
+        # Process messages sequentially: check each user/assistant message with appropriate rails
+        all_rails_status = {}
+        all_blocked_rails = []
+        all_stats = []
+
+        llm_params = {
+            k: v
+            for k, v in {
+                "temperature": body.temperature,
+                "top_p": body.top_p,
+                "max_tokens": body.max_tokens,
+            }.items()
+            if v is not None
+        }
+
+        for msg in body.messages:
+            if not isinstance(msg, dict) or "role" not in msg:
+                continue
+
+            role = msg.get("role")
+            content = msg.get("content", "")
+
+            # Determine which rails to run and prepare messages
+            if role == "user":
+                options = _create_check_options(
+                    run_input=True, run_output=False, llm_params=llm_params
+                )
+                check_messages = [{"role": "user", "content": content}]
+            elif role == "assistant":
+                options = _create_check_options(
+                    run_input=False, run_output=True, llm_params=llm_params
+                )
+                # Output rails need context, provide a dummy user message
+                check_messages = [
+                    {"role": "user", "content": "context"},
+                    {"role": "assistant", "content": content},
+                ]
+            else:
+                # Skip system, tool, and other message types
+                continue
+
+            # Execute guardrail check for this message
+            res = await llm_rails.generate_async(
+                messages=check_messages, options=options
+            )
+
+            # Collect results
+            if isinstance(res, GenerationResponse) and res.log:
+                if res.log.activated_rails:
+                    for rail in res.log.activated_rails:
+                        rail_status = "blocked" if rail.stop else "success"
+                        all_rails_status[rail.name] = RailStatus(status=rail_status)
+                        if rail.stop and rail.name not in all_blocked_rails:
+                            all_blocked_rails.append(rail.name)
+
+                if res.log.stats:
+                    all_stats.append(res.log.stats)
+
+        # Aggregate stats from all message checks
+        if all_stats:
+            fields = [
+                "input_rails_duration",
+                "output_rails_duration",
+                "total_duration",
+                "llm_calls_duration",
+                "llm_calls_count",
+                "llm_calls_total_prompt_tokens",
+                "llm_calls_total_completion_tokens",
+                "llm_calls_total_tokens",
+            ]
+            aggregated_stats = {
+                field: sum(getattr(stat, field) or 0 for stat in all_stats)
+                for field in fields
+            }
+        else:
+            aggregated_stats = {}
+
+        return GuardrailCheckResponseBody(
+            status="blocked" if all_blocked_rails else "success",
+            rails_status=all_rails_status,
+            guardrails_data={
+                "log": {"activated_rails": all_blocked_rails, "stats": aggregated_stats}
+            },
+        )
+
+    except Exception as ex:
+        log.exception(ex)
+        return _create_error_response("Internal server error.", str(ex))
 
 
 # By default, there are no challenges
