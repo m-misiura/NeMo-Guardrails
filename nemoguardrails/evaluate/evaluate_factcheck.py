@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,13 +20,11 @@ import time
 
 import tqdm
 import typer
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from nemoguardrails import LLMRails
 from nemoguardrails.actions.llm.utils import llm_call
 from nemoguardrails.evaluate.utils import load_dataset
-from nemoguardrails.llm.params import llm_params
 from nemoguardrails.llm.prompts import Task
 from nemoguardrails.llm.taskmanager import LLMTaskManager
 from nemoguardrails.rails.llm.config import RailsConfig
@@ -95,18 +93,23 @@ class FactCheckEvaluation:
             template=create_negatives_template,
             input_variables=["evidence", "answer"],
         )
-        create_negatives_chain = LLMChain(prompt=create_negatives_prompt, llm=self.llm)
+
+        # Bind config parameters to the LLM for generating negative samples
+        llm_with_config = self.llm.bind(temperature=0.8, max_tokens=300)
 
         print("Creating negative samples...")
         for data in tqdm.tqdm(dataset):
             assert "evidence" in data and "question" in data and "answer" in data
             evidence = data["evidence"]
             answer = data["answer"]
-            with llm_params(self.llm, temperature=0.8, max_tokens=300):
-                negative_answer = create_negatives_chain.predict(
-                    evidence=evidence, answer=answer
-                )
-            data["incorrect_answer"] = negative_answer.strip()
+
+            # Format the prompt and invoke the LLM directly
+            formatted_prompt = create_negatives_prompt.format(evidence=evidence, answer=answer)
+            negative_answer = llm_with_config.invoke(formatted_prompt)
+            if isinstance(negative_answer, str):
+                data["incorrect_answer"] = negative_answer.strip()
+            else:
+                data["incorrect_answer"] = negative_answer.content.strip()
 
         return dataset
 
@@ -128,11 +131,7 @@ class FactCheckEvaluation:
         total_time = 0
 
         for sample in tqdm.tqdm(self.dataset):
-            assert (
-                "evidence" in sample
-                and "answer" in sample
-                and "incorrect_answer" in sample
-            )
+            assert "evidence" in sample and "answer" in sample and "incorrect_answer" in sample
             evidence = sample["evidence"]
             if split == "positive":
                 answer = sample["answer"]
@@ -148,9 +147,7 @@ class FactCheckEvaluation:
                 force_string_to_message=True,
             )
             stop = self.llm_task_manager.get_stop_tokens(Task.SELF_CHECK_FACTS)
-            fact_check = asyncio.run(
-                llm_call(prompt=fact_check_prompt, llm=self.llm, stop=stop)
-            )
+            fact_check = asyncio.run(llm_call(prompt=fact_check_prompt, llm=self.llm, stop=stop))
             end_time = time.time()
             time.sleep(0.5)  # avoid rate-limits
             fact_check = fact_check.lower().strip()
@@ -178,22 +175,16 @@ class FactCheckEvaluation:
             self.dataset = self.create_negative_samples(self.dataset)
 
         print("Checking facts - positive entailment")
-        positive_fact_check_predictions, pos_num_correct, pos_time = self.check_facts(
-            split="positive"
-        )
+        positive_fact_check_predictions, pos_num_correct, pos_time = self.check_facts(split="positive")
         print("Checking facts - negative entailment")
-        negative_fact_check_predictions, neg_num_correct, neg_time = self.check_facts(
-            split="negative"
-        )
+        negative_fact_check_predictions, neg_num_correct, neg_time = self.check_facts(split="negative")
 
-        print(f"Positive Accuracy: {pos_num_correct/len(self.dataset) * 100}")
-        print(f"Negative Accuracy: {neg_num_correct/len(self.dataset) * 100}")
-        print(
-            f"Overall Accuracy: {(pos_num_correct + neg_num_correct)/(2*len(self.dataset))* 100}"
-        )
+        print(f"Positive Accuracy: {pos_num_correct / len(self.dataset) * 100}")
+        print(f"Negative Accuracy: {neg_num_correct / len(self.dataset) * 100}")
+        print(f"Overall Accuracy: {(pos_num_correct + neg_num_correct) / (2 * len(self.dataset)) * 100}")
 
         print("---Time taken per sample:---")
-        print(f"Ask LLM:\t{(pos_time+neg_time)*1000/(2*len(self.dataset)):.1f}ms")
+        print(f"Ask LLM:\t{(pos_time + neg_time) * 1000 / (2 * len(self.dataset)):.1f}ms")
 
         if self.write_outputs:
             dataset_name = os.path.basename(self.dataset_path).split(".")[0]
@@ -217,16 +208,12 @@ def main(
         help="Path to the folder containing the dataset",
     ),
     num_samples: int = typer.Option(50, help="Number of samples to be evaluated"),
-    create_negatives: bool = typer.Option(
-        True, help="create synthetic negative samples"
-    ),
+    create_negatives: bool = typer.Option(True, help="create synthetic negative samples"),
     output_dir: str = typer.Option(
         "eval_outputs/factchecking",
         help="Path to the folder where the outputs will be written",
     ),
-    write_outputs: bool = typer.Option(
-        True, help="Write outputs to the output directory"
-    ),
+    write_outputs: bool = typer.Option(True, help="Write outputs to the output directory"),
 ):
     fact_check = FactCheckEvaluation(
         config,

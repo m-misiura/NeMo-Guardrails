@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -169,9 +169,7 @@ async def test_both_interfaces_identical():
 
     # process_stream interface
     results_process_stream = []
-    async for chunk_batch in buffer_strategy.process_stream(
-        realistic_streaming_handler()
-    ):
+    async for chunk_batch in buffer_strategy.process_stream(realistic_streaming_handler()):
         results_process_stream.append(
             (
                 chunk_batch.processing_context.copy(),
@@ -343,12 +341,8 @@ async def test_subword_token_preservation():
     assert "helping" in full_text, f"Expected 'helping' but got: {full_text}"
 
     # verify no extra spaces were introduced between subword tokens
-    assert (
-        "ass isting" not in full_text
-    ), f"Found extra space in subword tokens: {full_text}"
-    assert (
-        "help ing" not in full_text
-    ), f"Found extra space in subword tokens: {full_text}"
+    assert "ass isting" not in full_text, f"Found extra space in subword tokens: {full_text}"
+    assert "help ing" not in full_text, f"Found extra space in subword tokens: {full_text}"
 
     # expected result should be: "assisting with helping you"
     expected = "assisting with helping you"
@@ -464,9 +458,7 @@ async def test_complete_implementation_works():
                 if len(buffer) >= 2:
                     from nemoguardrails.rails.llm.buffer import ChunkBatch
 
-                    yield ChunkBatch(
-                        processing_context=buffer, user_output_chunks=buffer
-                    )
+                    yield ChunkBatch(processing_context=buffer, user_output_chunks=buffer)
                     buffer = []
 
             if buffer:

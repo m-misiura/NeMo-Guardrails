@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,9 +48,7 @@ def register_log_adapter(model: Type, name: Optional[str] = None):
         name = model.name
 
     if not name:
-        raise ValueError(
-            "The engine name must be provided either in the model or as an argument."
-        )
+        raise ValueError("The engine name must be provided either in the model or as an argument.")
 
     registry = LogAdapterRegistry()
     registry.add(name, model)

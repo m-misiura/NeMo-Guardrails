@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,9 +58,7 @@ def test_2():
 def test_3():
     # This config just imports another one, to check that actions are correctly
     # loaded.
-    colang_path_dirs.append(
-        os.path.join(os.path.dirname(__file__), "..", "test_configs")
-    )
+    colang_path_dirs.append(os.path.join(os.path.dirname(__file__), "..", "test_configs"))
 
     config = RailsConfig.from_content(
         colang_content="""

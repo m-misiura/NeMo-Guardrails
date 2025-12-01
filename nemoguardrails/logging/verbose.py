@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +54,9 @@ class VerboseHandler(logging.StreamHandler):
                 skip_print = True
                 if verbose_llm_calls:
                     console.print("")
-                    console.print(f"[cyan]LLM {title} ({record.id[:5]}..)[/]")
+                    id_str = getattr(record, "id", None)
+                    id_display = f"({id_str[:5]}..)" if id_str else ""
+                    console.print(f"[cyan]LLM {title} {id_display}[/]")
                     for line in body.split("\n"):
                         text = Text(line, style="black on #006600", end="\n")
                         text.pad_right(console.width)
@@ -66,9 +68,10 @@ class VerboseHandler(logging.StreamHandler):
                 if verbose_llm_calls:
                     skip_print = True
                     console.print("")
-                    console.print(
-                        f"[cyan]LLM Prompt ({record.id[:5]}..) - {record.task}[/]"
-                    )
+                    id_str = getattr(record, "id", None)
+                    id_display = f"({id_str[:5]}..)" if id_str else ""
+                    task_str = getattr(record, "task", "unknown")
+                    console.print(f"[cyan]LLM Prompt {id_display} - {task_str}[/]")
 
                     for line in body.split("\n"):
                         if line.strip() == "[/]":
@@ -109,13 +112,9 @@ class VerboseHandler(logging.StreamHandler):
 
                             # We're adding a new line before action events, to
                             # make it more readable.
-                            if event_type.startswith("Start") and event_type.endswith(
-                                "Action"
-                            ):
+                            if event_type.startswith("Start") and event_type.endswith("Action"):
                                 title = f"[magenta][bold]Start[/]{event_type[5:]}[/]"
-                            elif event_type.startswith("Stop") and event_type.endswith(
-                                "Action"
-                            ):
+                            elif event_type.startswith("Stop") and event_type.endswith("Action"):
                                 title = f"[magenta][bold]Stop[/]{event_type[4:]}[/]"
                             elif event_type.endswith("ActionUpdated"):
                                 title = f"[magenta]{event_type[:-7]}[bold]Updated[/][/]"
@@ -126,6 +125,8 @@ class VerboseHandler(logging.StreamHandler):
                                     title = f"[magenta]{event_type[:-8]}[bold]Finished[/][/]"
                             elif event_type.endswith("ActionFailed"):
                                 title = f"[magenta]{event_type[:-6]}[bold]Failed[/][/]"
+                            elif event_type == "BotThinking":
+                                title = f"[yellow bold]{event_type}[/]"
                             else:
                                 title = event_type
                         else:

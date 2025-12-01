@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -66,9 +66,7 @@ def test_2():
             bot greet john
         """
 
-    result = parse_coflows_to_yml_flows(
-        filename="", content=content, snippets={}, include_source_mapping=False
-    )
+    result = parse_coflows_to_yml_flows(filename="", content=content, snippets={}, include_source_mapping=False)
 
     print(yaml.dump(result))
 
@@ -81,9 +79,7 @@ def test_3():
           execute log_greeting(name="dfdf")
         """
 
-    result = parse_coflows_to_yml_flows(
-        filename="", content=content, snippets={}, include_source_mapping=False
-    )
+    result = parse_coflows_to_yml_flows(filename="", content=content, snippets={}, include_source_mapping=False)
 
     print(yaml.dump(result))
 

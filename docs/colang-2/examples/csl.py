@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,7 @@ pathlib.Path(__file__).parent.parent.parent.resolve()
 sys.path.append(str(pathlib.Path(__file__).parent.parent.parent.parent.resolve()))
 print(sys.path)
 
-from utils import compare_interaction_with_test_script
+from utils import compare_interaction_with_test_script  # noqa: E402
 
 ########################################################################################################################
 # CORE
@@ -637,9 +637,7 @@ tick
 # USAGE_END: test_repeating_timer
         """
 
-    await compare_interaction_with_test_script(
-        test_script, colang_code, wait_time_s=2.0
-    )
+    await compare_interaction_with_test_script(test_script, colang_code, wait_time_s=2.0)
 
 
 @pytest.mark.asyncio
@@ -809,9 +807,7 @@ nine
 # USAGE_END: test_polling_llm_request_response
         """
 
-    await compare_interaction_with_test_script(
-        test_script, colang_code, llm_responses=['"nine"']
-    )
+    await compare_interaction_with_test_script(test_script, colang_code, llm_responses=['"nine"'])
 
 
 @pytest.mark.asyncio

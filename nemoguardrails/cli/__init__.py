@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,8 @@
 
 import logging
 import os
-from typing import List, Optional
+from enum import Enum
+from typing import List, Literal, Optional
 
 import typer
 import uvicorn
@@ -27,13 +28,22 @@ from nemoguardrails.actions_server import actions_server
 from nemoguardrails.cli.chat import run_chat
 from nemoguardrails.cli.migration import migrate
 from nemoguardrails.cli.providers import _list_providers, select_provider_with_type
-from nemoguardrails.eval import cli
+from nemoguardrails.eval import cli as eval_cli
 from nemoguardrails.logging.verbose import set_verbose
 from nemoguardrails.utils import init_random_seed
 
+
+class ColangVersions(str, Enum):
+    one = "1.0"
+    two_alpha = "2.0-alpha"
+
+
+_COLANG_VERSIONS = [version.value for version in ColangVersions]
+
+
 app = typer.Typer()
 
-app.add_typer(cli.app, name="eval", short_help="Evaluation a guardrail configuration.")
+app.add_typer(eval_cli.app, name="eval", short_help="Evaluation a guardrail configuration.")
 app.pretty_exceptions_enable = False
 
 logging.getLogger().setLevel(logging.WARNING)
@@ -44,7 +54,8 @@ def chat(
     config: List[str] = typer.Option(
         default=["config"],
         exists=True,
-        help="Path to a directory containing configuration files to use. Can also point to a single configuration file.",
+        help="Path to a directory containing configuration files to use. "
+        "Can also point to a single configuration file.",
     ),
     verbose: bool = typer.Option(
         default=False,
@@ -60,7 +71,8 @@ def chat(
     ),
     debug_level: List[str] = typer.Option(
         default=[],
-        help="Enable debug mode which prints rich information about the flows execution. Available levels: WARNING, INFO, DEBUG",
+        help="Enable debug mode which prints rich information about the flows execution. "
+        "Available levels: WARNING, INFO, DEBUG",
     ),
     streaming: bool = typer.Option(
         default=False,
@@ -77,7 +89,7 @@ def chat(
 ):
     """Start an interactive chat session."""
     if len(config) > 1:
-        typer.secho(f"Multiple configurations are not supported.", fg=typer.colors.RED)
+        typer.secho("Multiple configurations are not supported.", fg=typer.colors.RED)
         typer.echo("Please provide a single folder.")
         raise typer.Exit(1)
 
@@ -110,9 +122,7 @@ def chat(
 
 @app.command()
 def server(
-    port: int = typer.Option(
-        default=8000, help="The port that the server should listen on. "
-    ),
+    port: int = typer.Option(default=8000, help="The port that the server should listen on. "),
     config: List[str] = typer.Option(
         default=[],
         exists=True,
@@ -143,23 +153,27 @@ def server(
     if config:
         # We make sure there is no trailing separator, as that might break things in
         # single config mode.
-        api.app.rails_config_path = os.path.expanduser(config[0].rstrip(os.path.sep))
+        setattr(
+            api.app,
+            "rails_config_path",
+            os.path.expanduser(config[0].rstrip(os.path.sep)),
+        )
     else:
         # If we don't have a config, we try to see if there is a local config folder
         local_path = os.getcwd()
         local_configs_path = os.path.join(local_path, "config")
 
         if os.path.exists(local_configs_path):
-            api.app.rails_config_path = local_configs_path
+            setattr(api.app, "rails_config_path", local_configs_path)
 
     if verbose:
         logging.getLogger().setLevel(logging.INFO)
 
     if disable_chat_ui:
-        api.app.disable_chat_ui = True
+        setattr(api.app, "disable_chat_ui", True)
 
     if auto_reload:
-        api.app.auto_reload = True
+        setattr(api.app, "auto_reload", True)
 
     if prefix:
         server_app = FastAPI()
@@ -173,17 +187,12 @@ def server(
     uvicorn.run(server_app, port=port, log_level="info", host="0.0.0.0")
 
 
-_AVAILABLE_OPTIONS = ["1.0", "2.0-alpha"]
-
-
 @app.command()
 def convert(
-    path: str = typer.Argument(
-        ..., help="The path to the file or directory to migrate."
-    ),
-    from_version: str = typer.Option(
-        default="1.0",
-        help=f"The version of the colang files to migrate from. Available options: {_AVAILABLE_OPTIONS}.",
+    path: str = typer.Argument(..., help="The path to the file or directory to migrate."),
+    from_version: ColangVersions = typer.Option(
+        default=ColangVersions.one,
+        help=f"The version of the colang files to migrate from. Available options: {_COLANG_VERSIONS}.",
     ),
     verbose: bool = typer.Option(
         default=False,
@@ -209,20 +218,21 @@ def convert(
 
     absolute_path = os.path.abspath(path)
 
+    # Typer CLI args have to use an enum, not literal. Convert to Literal here
+    from_version_literal: Literal["1.0", "2.0-alpha"] = from_version.value
+
     migrate(
         path=absolute_path,
         include_main_flow=include_main_flow,
         use_active_decorator=use_active_decorator,
-        from_version=from_version,
+        from_version=from_version_literal,
         validate=validate,
     )
 
 
 @app.command("actions-server")
 def action_server(
-    port: int = typer.Option(
-        default=8001, help="The port that the server should listen on. "
-    ),
+    port: int = typer.Option(default=8001, help="The port that the server should listen on. "),
 ):
     """Start a NeMo Guardrails actions server."""
 
@@ -231,9 +241,7 @@ def action_server(
 
 @app.command()
 def find_providers(
-    list_only: bool = typer.Option(
-        False, "--list", "-l", help="Just list all available providers"
-    ),
+    list_only: bool = typer.Option(False, "--list", "-l", help="Just list all available providers"),
 ):
     """List and select LLM providers interactively.
 
@@ -277,8 +285,6 @@ def version_callback(value: bool):
 
 @app.callback()
 def cli(
-    _: Optional[bool] = typer.Option(
-        None, "-v", "--version", callback=version_callback, is_eager=True
-    ),
+    _: Optional[bool] = typer.Option(None, "-v", "--version", callback=version_callback, is_eager=True),
 ):
     pass

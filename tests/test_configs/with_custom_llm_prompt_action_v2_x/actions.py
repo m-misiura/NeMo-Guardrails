@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,14 +16,12 @@
 from ast import literal_eval
 from typing import Optional
 
-from langchain_core.language_models.llms import BaseLLM
+from langchain_core.language_models import BaseLLM
 
 from nemoguardrails.actions import action
 from nemoguardrails.actions.llm.utils import llm_call
 from nemoguardrails.context import llm_call_info_var
-from nemoguardrails.llm.params import llm_params
 from nemoguardrails.llm.taskmanager import LLMTaskManager
-from nemoguardrails.llm.types import Task
 from nemoguardrails.logging.explain import LLMCallInfo
 
 
@@ -46,8 +44,7 @@ async def custom_llm_request(
     # Initialize the LLMCallInfo object
     llm_call_info_var.set(LLMCallInfo(task=prompt_template_name))
 
-    with llm_params(llm, temperature=0.5):
-        result = await llm_call(llm, prompt, stop=stop)
+    result = await llm_call(llm, prompt, stop=stop, llm_params={"temperature": 0.5})
 
     result = llm_task_manager.parse_task_output(prompt_template_name, output=result)
     result = result.text

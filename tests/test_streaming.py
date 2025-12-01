@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,9 +27,7 @@ from tests.utils import FakeLLM, TestChat
 
 @pytest.fixture
 def chat_1():
-    config: RailsConfig = RailsConfig.from_content(
-        config={"models": [], "streaming": True}
-    )
+    config: RailsConfig = RailsConfig.from_content(config={"models": [], "streaming": True})
     return TestChat(
         config,
         llm_completions=[
@@ -161,9 +159,7 @@ async def test_streaming_single_llm_call():
     )
     chat = TestChat(
         config,
-        llm_completions=[
-            '  express greeting\nbot express greeting\n  "Hi, how are you doing?"'
-        ],
+        llm_completions=['  express greeting\nbot express greeting\n  "Hi, how are you doing?"'],
         streaming=True,
     )
 
@@ -200,9 +196,7 @@ async def test_streaming_single_llm_call_with_message_override():
     )
     chat = TestChat(
         config,
-        llm_completions=[
-            '  express greeting\nbot express greeting\n  "Hi, how are you doing?"'
-        ],
+        llm_completions=['  express greeting\nbot express greeting\n  "Hi, how are you doing?"'],
         streaming=True,
     )
 
@@ -359,9 +353,7 @@ async def test_streaming_output_rails_allowed(output_rails_streaming_config):
     # number of buffered chunks should be equal to the number of actions
     # we are apply #calculate_number_of_actions of time the output rails
     # FIXME: nice but stupid
-    assert len(expected_chunks) == _calculate_number_of_actions(
-        len(llm_completions[1].lstrip().split(" ")), 4, 2
-    )
+    assert len(expected_chunks) == _calculate_number_of_actions(len(llm_completions[1].lstrip().split(" ")), 4, 2)
     # Wait for proper cleanup, otherwise we get a Runtime Error
     await asyncio.gather(*asyncio.all_tasks() - {asyncio.current_task()})
 
@@ -475,6 +467,95 @@ def _calculate_number_of_actions(input_length, chunk_size, context_size):
 
 
 @pytest.mark.asyncio
+async def test_streaming_with_output_rails_disabled_raises_error():
+    config = RailsConfig.from_content(
+        config={
+            "models": [],
+            "rails": {
+                "output": {
+                    "flows": {"self check output"},
+                    "streaming": {
+                        "enabled": False,
+                    },
+                }
+            },
+            "streaming": True,
+            "prompts": [{"task": "self_check_output", "content": "a test template"}],
+        },
+        colang_content="""
+        define user express greeting
+          "hi"
+
+        define flow
+          user express greeting
+          bot tell joke
+        """,
+    )
+
+    chat = TestChat(
+        config,
+        llm_completions=[],
+        streaming=True,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        async for chunk in chat.app.stream_async(
+            messages=[{"role": "user", "content": "Hi!"}],
+        ):
+            pass
+
+    assert str(exc_info.value) == (
+        "stream_async() cannot be used when output rails are configured but "
+        "rails.output.streaming.enabled is False. Either set "
+        "rails.output.streaming.enabled to True in your configuration, or use "
+        "generate_async() instead of stream_async()."
+    )
+
+
+@pytest.mark.asyncio
+async def test_streaming_with_output_rails_no_streaming_config_raises_error():
+    config = RailsConfig.from_content(
+        config={
+            "models": [],
+            "rails": {
+                "output": {
+                    "flows": {"self check output"},
+                }
+            },
+            "streaming": True,
+            "prompts": [{"task": "self_check_output", "content": "a test template"}],
+        },
+        colang_content="""
+        define user express greeting
+          "hi"
+
+        define flow
+          user express greeting
+          bot tell joke
+        """,
+    )
+
+    chat = TestChat(
+        config,
+        llm_completions=[],
+        streaming=True,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        async for chunk in chat.app.stream_async(
+            messages=[{"role": "user", "content": "Hi!"}],
+        ):
+            pass
+
+    assert str(exc_info.value) == (
+        "stream_async() cannot be used when output rails are configured but "
+        "rails.output.streaming.enabled is False. Either set "
+        "rails.output.streaming.enabled to True in your configuration, or use "
+        "generate_async() instead of stream_async()."
+    )
+
+
+@pytest.mark.asyncio
 async def test_streaming_error_handling():
     """Test that errors during streaming are properly formatted and returned."""
     # Create a config with an invalid model to trigger an error
@@ -514,10 +595,7 @@ async def test_streaming_error_handling():
     error_data = json.loads(error_chunk)
     assert "error" in error_data
     assert "message" in error_data["error"]
-    assert (
-        "The model `non-existent-model` does not exist"
-        in error_data["error"]["message"]
-    )
+    assert "The model `non-existent-model` does not exist" in error_data["error"]["message"]
     assert error_data["error"]["type"] == "invalid_request_error"
     assert error_data["error"]["code"] == "model_not_found"
 
@@ -528,8 +606,7 @@ async def test_streaming_error_handling():
 @pytest.fixture
 def custom_streaming_providers():
     """Fixture that registers both custom chat and LLM providers for testing."""
-    from langchain.chat_models.base import BaseChatModel
-    from langchain_core.language_models.llms import BaseLLM
+    from langchain_core.language_models import BaseChatModel, BaseLLM
 
     from nemoguardrails.llm.providers import (
         register_chat_provider,
@@ -688,9 +765,7 @@ def test_main_llm_supports_streaming_flag_config_combinations(
     if model_type == "chat":
         engine = "custom_streaming" if model_streaming else "custom_none_streaming"
     else:
-        engine = (
-            "custom_streaming_llm" if model_streaming else "custom_none_streaming_llm"
-        )
+        engine = "custom_streaming_llm" if model_streaming else "custom_none_streaming_llm"
 
     config = RailsConfig.from_content(
         config={
@@ -737,6 +812,6 @@ def test_main_llm_supports_streaming_flag_disabled_when_no_streaming():
     fake_llm = FakeLLM(responses=["test"], streaming=False)
     rails = LLMRails(config, llm=fake_llm)
 
-    assert (
-        rails.main_llm_supports_streaming is False
-    ), "main_llm_supports_streaming should be False when streaming is disabled"
+    assert rails.main_llm_supports_streaming is False, (
+        "main_llm_supports_streaming should be False when streaming is disabled"
+    )

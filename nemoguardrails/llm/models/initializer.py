@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +15,19 @@
 
 """Module for initializing LLM models with proper error handling and type checking."""
 
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Any, Dict, Literal, Union
 
-from langchain_core.language_models import BaseChatModel
-from langchain_core.language_models.llms import BaseLLM
+from langchain_core.language_models import BaseChatModel, BaseLLM
 
-from .langchain_initializer import ModelInitializationError, init_langchain_model
+from nemoguardrails.llm.models.langchain_initializer import (
+    ModelInitializationError,
+    init_langchain_model,
+)
 
 
-# later we can easily conver it to a class
+# later we can easily convert it to a class
 def init_llm_model(
-    model_name: Optional[str],
+    model_name: str,
     provider_name: str,
     mode: Literal["chat", "text"],
     kwargs: Dict[str, Any],

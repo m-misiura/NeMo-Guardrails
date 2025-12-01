@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,9 +39,7 @@ def test_1():
         ],
     )
 
-    async def custom_action(
-        name: str, age: int, height: float, colors: List[str], data: dict
-    ):
+    async def custom_action(name: str, age: int, height: float, colors: List[str], data: dict):
         assert name == "John"
         assert age == 20
         assert height == 5.8

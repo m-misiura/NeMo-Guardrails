@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,12 +71,8 @@ class TestPassthroughLLMActionLogging(unittest.IsolatedAsyncioTestCase):
             messages = [{"role": "user", "content": "hi"}]
             response = rails.generate(messages=messages)
             # Check that 'StartPassthroughLLMAction' is not in the logs
-            passthrough_invoked = any(
-                "PassthroughLLMActionFinished" in message for message in log.output
-            )
-            self.assertFalse(
-                passthrough_invoked, "PassthroughLLMAction was invoked unexpectedly."
-            )
+            passthrough_invoked = any("PassthroughLLMActionFinished" in message for message in log.output)
+            self.assertFalse(passthrough_invoked, "PassthroughLLMAction was invoked unexpectedly.")
 
             self.assertIn("content", response)
             self.assertIsInstance(response["content"], str)
@@ -94,12 +90,8 @@ class TestPassthroughLLMActionLogging(unittest.IsolatedAsyncioTestCase):
             messages = [{"role": "user", "content": "What can you do?"}]
             response = rails.generate(messages=messages)
             # Check that 'StartPassthroughLLMAction' is in the logs
-            passthrough_invoked = any(
-                "StartPassthroughLLMAction" in message for message in log.output
-            )
-            self.assertTrue(
-                passthrough_invoked, "PassthroughLLMAction was not invoked."
-            )
+            passthrough_invoked = any("StartPassthroughLLMAction" in message for message in log.output)
+            self.assertTrue(passthrough_invoked, "PassthroughLLMAction was not invoked.")
 
             self.assertIn("content", response)
             self.assertIsInstance(response["content"], str)

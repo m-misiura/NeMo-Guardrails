@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,9 +75,7 @@ def check_jailbreak_length_per_perplexity(input_string: str, threshold: float) -
     return result
 
 
-def check_jailbreak_prefix_suffix_perplexity(
-    input_string: str, threshold: float
-) -> dict:
+def check_jailbreak_prefix_suffix_perplexity(input_string: str, threshold: float) -> dict:
     """
     Check whether the input string has prefix or suffix perplexity greater than the threshold.
 

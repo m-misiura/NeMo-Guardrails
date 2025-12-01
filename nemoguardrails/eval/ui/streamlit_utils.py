@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,9 +32,7 @@ def get_span_colors(_eval_output: EvalOutput):
     for log in _eval_output.logs:
         for span in reversed(log.trace):
             if span.name not in colors:
-                colors[span.name] = "#" + "".join(
-                    [random.choice("0123456789ABCDEF") for _ in range(6)]
-                )
+                colors[span.name] = "#" + "".join([random.choice("0123456789ABCDEF") for _ in range(6)])
     return colors
 
 

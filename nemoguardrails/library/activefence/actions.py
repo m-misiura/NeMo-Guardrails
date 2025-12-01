@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -91,8 +91,7 @@ async def call_activefence_api(text: Optional[str] = None, **kwargs):
         ) as response:
             if response.status != 200:
                 raise ValueError(
-                    f"ActiveFence call failed with status code {response.status}.\n"
-                    f"Details: {await response.text()}"
+                    f"ActiveFence call failed with status code {response.status}.\nDetails: {await response.text()}"
                 )
             response_json = await response.json()
             log.info(json.dumps(response_json, indent=True))

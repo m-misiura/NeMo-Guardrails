@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,4 @@ def test_custom_llm_registration():
 
     prompt = get_prompt(config, Task.GENERATE_USER_INTENT)
 
-    assert (
-        prompt.content
-        == "<<This is a placeholder for a custom prompt for generating the user intent>>"
-    )
+    assert prompt.content == "<<This is a placeholder for a custom prompt for generating the user intent>>"

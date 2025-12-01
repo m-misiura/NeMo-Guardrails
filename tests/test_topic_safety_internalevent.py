@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,9 +54,7 @@ async def test_topic_safety_check_input_with_internal_events():
     llms = {"topic_control": "mock_llm"}
     llm_task_manager = MockTaskManager()
 
-    with patch(
-        "nemoguardrails.library.topic_safety.actions.llm_call", new_callable=AsyncMock
-    ) as mock_llm_call:
+    with patch("nemoguardrails.library.topic_safety.actions.llm_call", new_callable=AsyncMock) as mock_llm_call:
         mock_llm_call.return_value = "on-topic"
 
         # should not raise TypeError: 'InternalEvent' object is not subscriptable

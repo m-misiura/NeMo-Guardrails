@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,9 +35,7 @@ class SimplifyFormatter(logging.Formatter):
         text = pattern.sub(lambda m: m.group(1)[:4] + "...", text)
 
         # Replace time stamps
-        pattern = re.compile(
-            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}[+-]\d{2}:\d{2}"
-        )
+        pattern = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}[+-]\d{2}:\d{2}")
         text = pattern.sub(lambda m: "...", text)
 
         # Hide certain event properties
@@ -50,9 +48,7 @@ class SimplifyFormatter(logging.Formatter):
             "action_info_modality_policy",
         ]
 
-        pattern = re.compile(
-            r"(, )?'[^']*(?:" + "|".join(fields_to_hide) + ")': '[^']*'"
-        )
+        pattern = re.compile(r"(, )?'[^']*(?:" + "|".join(fields_to_hide) + ")': '[^']*'")
         text = pattern.sub("", text)
 
         # Hide main loop id

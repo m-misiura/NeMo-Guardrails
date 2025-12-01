@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -66,6 +66,10 @@ class Tracer:
         if generation_log is None:
             generation_log = self._generation_log
 
+        # At this point generation_log should not be None since it comes from self._generation_log
+        if generation_log is None:
+            raise Exception("Can't generate interaction log without Generation log")
+
         interaction_log = extract_interaction_log(
             interaction_output,
             generation_log,
@@ -93,9 +97,7 @@ class Tracer:
                 await stack.enter_async_context(adapter)
 
             # Transform the interaction logs asynchronously with use of all adapters
-            tasks = [
-                adapter.transform_async(interaction_log) for adapter in self.adapters
-            ]
+            tasks = [adapter.transform_async(interaction_log) for adapter in self.adapters]
             await asyncio.gather(*tasks)
 
 

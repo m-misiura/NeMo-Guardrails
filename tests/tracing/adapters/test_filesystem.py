@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -79,9 +79,7 @@ class TestFileSystemAdapter(unittest.TestCase):
             self.assertEqual(len(log_dict["spans"]), 1)
             self.assertEqual(log_dict["spans"][0]["name"], "test_span")
 
-    @unittest.skipIf(
-        importlib.util.find_spec("aiofiles") is None, "aiofiles is not installed"
-    )
+    @unittest.skipIf(importlib.util.find_spec("aiofiles") is None, "aiofiles is not installed")
     def test_transform_async(self):
         async def run_test():
             adapter = FileSystemAdapter(filepath=self.filepath)
@@ -396,9 +394,7 @@ class TestFileSystemAdapter(unittest.TestCase):
             self.assertIn("metrics", log_dict["spans"][2])
             self.assertNotIn("span_kind", log_dict["spans"][2])
 
-    @unittest.skipIf(
-        importlib.util.find_spec("aiofiles") is None, "aiofiles is not installed"
-    )
+    @unittest.skipIf(importlib.util.find_spec("aiofiles") is None, "aiofiles is not installed")
     def test_transform_async_with_otel_spans(self):
         async def run_test():
             adapter = FileSystemAdapter(filepath=self.filepath)

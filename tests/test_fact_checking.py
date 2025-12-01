@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,6 @@ from aioresponses import aioresponses
 
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions.actions import ActionResult, action
-from nemoguardrails.llm.providers.trtllm import llm
 from tests.utils import TestChat
 
 CONFIGS_FOLDER = os.path.join(os.path.dirname(__file__), ".", "test_configs")
@@ -50,9 +49,7 @@ async def retrieve_relevant_chunks():
 async def test_fact_checking_greeting(httpx_mock):
     # Test 1 - Greeting - No fact-checking invocation should happen
     config = RailsConfig.from_path(os.path.join(CONFIGS_FOLDER, "fact_checking"))
-    chat = TestChat(
-        config, llm_completions=["  express greeting", "Hi! How can I assist today?"]
-    )
+    chat = TestChat(config, llm_completions=["  express greeting", "Hi! How can I assist today?"])
     chat.app.register_action(retrieve_relevant_chunks, "retrieve_relevant_chunks")
 
     chat >> "hi"

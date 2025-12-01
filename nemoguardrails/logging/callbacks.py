@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +15,18 @@
 import logging
 import uuid
 from time import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, cast
 from uuid import UUID
 
-from langchain.callbacks import StdOutCallbackHandler
-from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackManager
-from langchain.callbacks.manager import AsyncCallbackManagerForChainRun
-from langchain.schema import AgentAction, AgentFinish, AIMessage, BaseMessage, LLMResult
-from langchain_core.outputs import ChatGeneration
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.callbacks.base import (
+    AsyncCallbackHandler,
+    BaseCallbackHandler,
+    BaseCallbackManager,
+)
+from langchain_core.callbacks.manager import AsyncCallbackManagerForChainRun
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.outputs import ChatGeneration, LLMResult
 
 from nemoguardrails.context import explain_info_var, llm_call_info_var, llm_stats_var
 from nemoguardrails.logging.explain import LLMCallInfo
@@ -33,7 +37,7 @@ from nemoguardrails.utils import new_uuid
 log = logging.getLogger(__name__)
 
 
-class LoggingCallbackHandler(AsyncCallbackHandler, StdOutCallbackHandler):
+class LoggingCallbackHandler(AsyncCallbackHandler):
     """Async callback handler that can be used to handle callbacks from langchain."""
 
     async def on_llm_start(
@@ -101,16 +105,17 @@ class LoggingCallbackHandler(AsyncCallbackHandler, StdOutCallbackHandler):
         if explain_info:
             explain_info.llm_calls.append(llm_call_info)
 
+        type_map = {
+            "human": "User",
+            "ai": "Bot",
+            "tool": "Tool",
+            "system": "System",
+            "developer": "Developer",
+        }
         prompt = "\n" + "\n".join(
             [
                 "[cyan]"
-                + (
-                    "User"
-                    if msg.type == "human"
-                    else "Bot"
-                    if msg.type == "ai"
-                    else "System"
-                )
+                + type_map.get(msg.type, msg.type.title())
                 + "[/]"
                 + "\n"
                 + (msg.content if isinstance(msg.content, str) else "")
@@ -162,9 +167,23 @@ class LoggingCallbackHandler(AsyncCallbackHandler, StdOutCallbackHandler):
             llm_call_info = LLMCallInfo()
         llm_call_info.completion = response.generations[0][0].text
         llm_call_info.finished_at = time()
+
+        completion_text = response.generations[0][0].text
+        reasoning_content = None
+
+        if isinstance(response.generations[0][0], ChatGeneration):
+            chat_gen = response.generations[0][0]
+            if hasattr(chat_gen, "message") and hasattr(chat_gen.message, "additional_kwargs"):
+                reasoning_content = chat_gen.message.additional_kwargs.get("reasoning_content")
+
+        if reasoning_content:
+            full_completion = f"{reasoning_content}\n---\n{completion_text}"
+        else:
+            full_completion = completion_text
+
         log.info(
             "Completion :: %s",
-            response.generations[0][0].text,
+            full_completion,
             extra={"id": llm_call_info.id, "task": llm_call_info.task},
         )
 
@@ -184,10 +203,14 @@ class LoggingCallbackHandler(AsyncCallbackHandler, StdOutCallbackHandler):
                 )
 
         log.info("Output Stats :: %s", response.llm_output)
-        took = llm_call_info.finished_at - llm_call_info.started_at
-        log.info("--- :: LLM call took %.2f seconds", took)
-        llm_stats.inc("total_time", took)
-        llm_call_info.duration = took
+        if llm_call_info.finished_at is not None and llm_call_info.started_at is not None:
+            took = llm_call_info.finished_at - llm_call_info.started_at
+            log.info("--- :: LLM call took %.2f seconds", took)
+            llm_stats.inc("total_time", took)
+            llm_call_info.duration = took
+        else:
+            log.warning("LLM call timing information incomplete")
+            llm_call_info.duration = 0.0
 
         # Update the token usage stats as well
         token_stats_found = False
@@ -213,23 +236,15 @@ class LoggingCallbackHandler(AsyncCallbackHandler, StdOutCallbackHandler):
                     ):
                         token_stats_found = True
                         token_usage = gen.message.usage_metadata
-                        llm_stats.inc(
-                            "total_tokens", token_usage.get("total_tokens", 0)
-                        )
+                        llm_stats.inc("total_tokens", token_usage.get("total_tokens", 0))
                         llm_call_info.total_tokens += token_usage.get("total_tokens", 0)
-                        llm_stats.inc(
-                            "total_prompt_tokens", token_usage.get("input_tokens", 0)
-                        )
-                        llm_call_info.prompt_tokens += token_usage.get(
-                            "input_tokens", 0
-                        )
+                        llm_stats.inc("total_prompt_tokens", token_usage.get("input_tokens", 0))
+                        llm_call_info.prompt_tokens += token_usage.get("input_tokens", 0)
                         llm_stats.inc(
                             "total_completion_tokens",
                             token_usage.get("output_tokens", 0),
                         )
-                        llm_call_info.completion_tokens += token_usage.get(
-                            "output_tokens", 0
-                        )
+                        llm_call_info.completion_tokens += token_usage.get("output_tokens", 0)
         if not token_stats_found and response.llm_output:
             # Fail-back mechanism for non-chat models. This works for OpenAI models,
             # but it may not work for others as response.llm_output is not standardized.
@@ -240,26 +255,20 @@ class LoggingCallbackHandler(AsyncCallbackHandler, StdOutCallbackHandler):
             llm_call_info.total_tokens = token_usage.get("total_tokens", 0)
             llm_stats.inc("total_prompt_tokens", token_usage.get("prompt_tokens", 0))
             llm_call_info.prompt_tokens = token_usage.get("prompt_tokens", 0)
-            llm_stats.inc(
-                "total_completion_tokens", token_usage.get("completion_tokens", 0)
-            )
+            llm_stats.inc("total_completion_tokens", token_usage.get("completion_tokens", 0))
             llm_call_info.completion_tokens = token_usage.get("completion_tokens", 0)
 
         if not token_stats_found:
-            log.info(
-                "Token stats in LLM call info cannot be computed for current model!"
-            )
+            log.info("Token stats in LLM call info cannot be computed for current model!")
 
         # Finally, we append the LLM call log to the processing log
         processing_log = processing_log_var.get()
         if processing_log:
-            processing_log.append(
-                {"type": "llm_call_info", "timestamp": time(), "data": llm_call_info}
-            )
+            processing_log.append({"type": "llm_call_info", "timestamp": time(), "data": llm_call_info})
 
     async def on_llm_error(
         self,
-        error: Union[Exception, KeyboardInterrupt],
+        error: BaseException,
         *,
         run_id: UUID,
         parent_run_id: Optional[UUID] = None,
@@ -290,7 +299,7 @@ class LoggingCallbackHandler(AsyncCallbackHandler, StdOutCallbackHandler):
 
     async def on_chain_error(
         self,
-        error: Union[Exception, KeyboardInterrupt],
+        error: BaseException,
         *,
         run_id: UUID,
         parent_run_id: Optional[UUID] = None,
@@ -321,7 +330,7 @@ class LoggingCallbackHandler(AsyncCallbackHandler, StdOutCallbackHandler):
 
     async def on_tool_error(
         self,
-        error: Union[Exception, KeyboardInterrupt],
+        error: BaseException,
         *,
         run_id: UUID,
         parent_run_id: Optional[UUID] = None,
@@ -362,14 +371,15 @@ class LoggingCallbackHandler(AsyncCallbackHandler, StdOutCallbackHandler):
 
 handlers = [LoggingCallbackHandler()]
 logging_callbacks = BaseCallbackManager(
-    handlers=handlers, inheritable_handlers=handlers
+    handlers=cast(List[BaseCallbackHandler], handlers),
+    inheritable_handlers=cast(List[BaseCallbackHandler], handlers),
 )
 
 logging_callback_manager_for_chain = AsyncCallbackManagerForChainRun(
     run_id=uuid.uuid4(),
     parent_run_id=None,
-    handlers=handlers,
-    inheritable_handlers=handlers,
+    handlers=cast(List[BaseCallbackHandler], handlers),
+    inheritable_handlers=cast(List[BaseCallbackHandler], handlers),
     tags=[],
     inheritable_tags=[],
 )

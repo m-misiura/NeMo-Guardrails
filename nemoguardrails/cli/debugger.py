@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +14,13 @@
 # limitations under the License.
 
 import shlex
-from typing import Optional
+from typing import TYPE_CHECKING, Dict, Optional, cast
 
 import typer
 from rich.table import Table
 from rich.tree import Tree
 
-from nemoguardrails.colang.v2_x.lang.colang_ast import SpecOp, SpecType
+from nemoguardrails.colang.v2_x.lang.colang_ast import Spec, SpecOp, SpecType
 from nemoguardrails.colang.v2_x.runtime.flows import (
     FlowConfig,
     FlowState,
@@ -31,8 +31,12 @@ from nemoguardrails.colang.v2_x.runtime.runtime import RuntimeV2_x
 from nemoguardrails.colang.v2_x.runtime.statemachine import is_active_flow
 from nemoguardrails.utils import console
 
+if TYPE_CHECKING:
+    from nemoguardrails.cli.chat import ChatState
+
 runtime: Optional[RuntimeV2_x] = None
 state: Optional[State] = None
+chat_state: Optional["ChatState"] = None
 
 app = typer.Typer(name="!!!", no_args_is_help=True, add_completion=False)
 
@@ -58,21 +62,24 @@ def set_output_state(_state: State):
 @app.command()
 def restart():
     """Restart the current Colang script."""
-    chat_state.state = None
-    chat_state.input_events = []
-    chat_state.first_time = True
+    if chat_state is not None:
+        chat_state.state = None
+        chat_state.input_events = []
+        chat_state.first_time = True
 
 
 @app.command()
 def pause():
     """Pause current interaction."""
-    chat_state.paused = True
+    if chat_state is not None:
+        chat_state.paused = True
 
 
 @app.command()
 def resume():
     """Pause current interaction."""
-    chat_state.paused = False
+    if chat_state is not None:
+        chat_state.paused = False
 
 
 @app.command()
@@ -82,35 +89,33 @@ def flow(
     """Shows all details about a flow or flow instance."""
     assert state
 
-    if flow_name in state.flow_configs:
-        flow_config = state.flow_configs[flow_name]
-        console.print(flow_config)
-    else:
-        matches = [
-            (uid, item) for uid, item in state.flow_states.items() if flow_name in uid
-        ]
-        if matches:
-            flow_instance = matches[0][1]
-            console.print(flow_instance.__dict__)
+    if state is not None:
+        if flow_name in state.flow_configs:
+            flow_config = state.flow_configs[flow_name]
+            console.print(flow_config)
         else:
-            console.print(f"Flow '{flow_name}' does not exist.")
-            return
+            matches = [(uid, item) for uid, item in state.flow_states.items() if flow_name in uid]
+            if matches:
+                flow_instance = matches[0][1]
+                console.print(flow_instance.__dict__)
+            else:
+                console.print(f"Flow '{flow_name}' does not exist.")
+                return
+    else:
+        console.print("No state available.")
 
 
 @app.command()
 def flows(
-    all: bool = typer.Option(
-        default=False, help="Show all flows (including inactive)."
-    ),
+    all: bool = typer.Option(default=False, help="Show all flows (including inactive)."),
     order_by_name: bool = typer.Option(
         default=False,
         help="Order flows by flow name, otherwise its ordered by event processing priority.",
     ),
 ):
     """Shows a table with all (active) flows ordered in terms of there interaction loop priority and name."""
-    assert state
-
-    """List the flows from the current state."""
+    if state is None:
+        raise RuntimeError("No state available")
 
     table = Table(header_style="bold magenta")
 
@@ -155,9 +160,7 @@ def flows(
         else:
             instances = []
             if flow_id in state.flow_id_states:
-                instances = [
-                    i.uid.split(")")[1][:5] for i in state.flow_id_states[flow_id]
-                ]
+                instances = [i.uid.split(")")[1][:5] for i in state.flow_id_states[flow_id]]
             rows.append(
                 [
                     flow_id,
@@ -170,10 +173,11 @@ def flows(
     if order_by_name:
         rows.sort(key=lambda x: x[0])
     else:
-        rows.sort(key=lambda x: (-state.flow_configs[x[0]].loop_priority, x[0]))
+        flow_configs: Dict[str, FlowConfig] = state.flow_configs
+        rows.sort(key=lambda x: (-flow_configs[x[0]].loop_priority, x[0]))
 
     for i, row in enumerate(rows):
-        table.add_row(f"{i+1}", *row)
+        table.add_row(f"{i + 1}", *row)
 
     console.print(table)
 
@@ -183,9 +187,12 @@ def tree(
     all: bool = typer.Option(
         default=False,
         help="Show all active flow instances (including inactive with `--all`).",
-    )
+    ),
 ):
     """Lists the tree of all active flows."""
+    if state is None or "main" not in state.flow_id_states:
+        raise RuntimeError("No main flow available.")
+
     main_flow = state.flow_id_states["main"][0]
 
     root = Tree("main")
@@ -209,17 +216,12 @@ def tree(
                     child_instance_flow_state = state.flow_states[child_instance_uid]
                     if (
                         is_active_flow(child_instance_flow_state)
-                        and child_instance_flow_state.flow_id
-                        == child_flow_state.flow_id
+                        and child_instance_flow_state.flow_id == child_flow_state.flow_id
                     ):
                         is_inactive_parent_instance = True
                         break
 
-            if (
-                not is_inactive_parent_instance
-                and not all
-                and not is_active_flow(child_flow_state)
-            ):
+            if not is_inactive_parent_instance and not all and not is_active_flow(child_flow_state):
                 continue
 
             child_uid_short = child_uid.split(")")[1][0:3] + "..."
@@ -231,13 +233,21 @@ def tree(
             # We also want to figure out if the flow is actually waiting on this child
             waiting_on = False
 
-            for head_id, head in flow_state.active_heads.items():
+            for _, head in flow_state.active_heads.items():
                 head_element = elements[head.position]
 
                 if isinstance(head_element, SpecOp):
-                    if head_element.op == "match":
-                        if head_element.spec.spec_type == SpecType.REFERENCE:
-                            var_name = head_element.spec.var_name
+                    head_element_spec_op = cast(SpecOp, head_element)
+                    if head_element_spec_op.op == "match":
+                        # Convert Spec to Spec object if it's a Dict
+                        spec: Spec = (
+                            head_element_spec_op.spec
+                            if isinstance(head_element_spec_op.spec, Spec)
+                            else Spec(**cast(Dict, head_element_spec_op.spec))
+                        )
+
+                        if spec.spec_type and spec.spec_type == SpecType.REFERENCE and spec.var_name:
+                            var_name = spec.var_name
                             var = flow_state.context.get(var_name)
 
                             if var == child_flow_state:
@@ -271,6 +281,6 @@ def run_command(command: str):
             command = "--help"
 
         app(shlex.split(command))
-    except SystemExit as e:
+    except SystemExit:
         # Prevent stopping the app
         pass

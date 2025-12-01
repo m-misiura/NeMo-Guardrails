@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,10 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 from typing import Optional
 
-import aioredis
+try:
+    import aioredis  # type: ignore[import]
+except ImportError:
+    aioredis = None  # type: ignore[assignment]
 
 from nemoguardrails.server.datastore.datastore import DataStore
 
@@ -24,9 +26,7 @@ from nemoguardrails.server.datastore.datastore import DataStore
 class RedisStore(DataStore):
     """A datastore implementation using Redis."""
 
-    def __init__(
-        self, url: str, username: Optional[str] = None, password: Optional[str] = None
-    ):
+    def __init__(self, url: str, username: Optional[str] = None, password: Optional[str] = None):
         """Constructor.
 
         Args:
@@ -35,12 +35,13 @@ class RedisStore(DataStore):
             username: [Optional] The username to use for authentication.
             password: [Optional] The password to use for authentication
         """
+        if aioredis is None:
+            raise ImportError("aioredis is required for RedisStore. Install it with: pip install aioredis")
+
         self.url = url
         self.username = username
         self.password = password
-        self.client = aioredis.from_url(
-            url=url, username=username, password=password, decode_responses=True
-        )
+        self.client = aioredis.from_url(url=url, username=username, password=password, decode_responses=True)
 
     async def set(self, key: str, value: str):
         """Save data into the datastore.

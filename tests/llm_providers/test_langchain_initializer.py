@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,16 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from nemoguardrails.llm.models.langchain_initializer import (
     ModelInitializationError,
-    _handle_model_special_cases,
-    _init_chat_completion_model,
-    _init_community_chat_models,
-    _init_text_completion_model,
     init_langchain_model,
 )
 
@@ -31,18 +27,10 @@ from nemoguardrails.llm.models.langchain_initializer import (
 def mock_initializers():
     """Mock all initialization methods for unit tests."""
     with (
-        patch(
-            "nemoguardrails.llm.models.langchain_initializer._handle_model_special_cases"
-        ) as mock_special,
-        patch(
-            "nemoguardrails.llm.models.langchain_initializer._init_chat_completion_model"
-        ) as mock_chat,
-        patch(
-            "nemoguardrails.llm.models.langchain_initializer._init_community_chat_models"
-        ) as mock_community,
-        patch(
-            "nemoguardrails.llm.models.langchain_initializer._init_text_completion_model"
-        ) as mock_text,
+        patch("nemoguardrails.llm.models.langchain_initializer._handle_model_special_cases") as mock_special,
+        patch("nemoguardrails.llm.models.langchain_initializer._init_chat_completion_model") as mock_chat,
+        patch("nemoguardrails.llm.models.langchain_initializer._init_community_chat_models") as mock_community,
+        patch("nemoguardrails.llm.models.langchain_initializer._init_text_completion_model") as mock_text,
     ):
         # Set __name__ attributes for the mocks
         mock_special.__name__ = "_handle_model_special_cases"
@@ -127,9 +115,7 @@ def test_unsupported_mode(mock_initializers):
 
 
 def test_missing_model_name(mock_initializers):
-    with pytest.raises(
-        ModelInitializationError, match="Model name is required for provider provider"
-    ):
+    with pytest.raises(ModelInitializationError, match="Model name is required for provider provider"):
         init_langchain_model(None, "provider", "chat", {})
     mock_initializers["special"].assert_not_called()
     mock_initializers["chat"].assert_not_called()
@@ -142,9 +128,7 @@ def test_all_initializers_raise_exceptions(mock_initializers):
     mock_initializers["chat"].side_effect = ValueError("Chat model failed")
     mock_initializers["community"].side_effect = ImportError("Community model failed")
     mock_initializers["text"].side_effect = KeyError("Text model failed")
-    with pytest.raises(
-        ModelInitializationError, match=r"Failed to initialize model 'unknown-model'"
-    ):
+    with pytest.raises(ModelInitializationError, match=r"Failed to initialize model 'unknown-model'"):
         init_langchain_model("unknown-model", "provider", "chat", {})
     mock_initializers["special"].assert_called_once()
     mock_initializers["chat"].assert_called_once()

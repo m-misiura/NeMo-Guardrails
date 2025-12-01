@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,13 +16,12 @@
 import logging
 from typing import Optional
 
-from langchain_core.language_models.llms import BaseLLM
+from langchain_core.language_models import BaseLLM
 
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions import action
 from nemoguardrails.actions.llm.utils import llm_call
 from nemoguardrails.context import llm_call_info_var
-from nemoguardrails.llm.params import llm_params
 from nemoguardrails.llm.taskmanager import LLMTaskManager
 from nemoguardrails.llm.types import Task
 from nemoguardrails.logging.explain import LLMCallInfo
@@ -53,6 +52,7 @@ async def self_check_output(
     _MAX_TOKENS = 3
     bot_response = context.get("bot_message")
     user_input = context.get("user_message")
+    bot_thinking = context.get("bot_thinking")
 
     task = Task.SELF_CHECK_OUTPUT
 
@@ -62,6 +62,7 @@ async def self_check_output(
             context={
                 "user_input": user_input,
                 "bot_response": bot_response,
+                "bot_thinking": bot_thinking,
             },
         )
         stop = llm_task_manager.get_stop_tokens(task=task)
@@ -71,10 +72,15 @@ async def self_check_output(
         # Initialize the LLMCallInfo object
         llm_call_info_var.set(LLMCallInfo(task=task.value))
 
-        with llm_params(
-            llm, temperature=config.lowest_temperature, max_tokens=max_tokens
-        ):
-            response = await llm_call(llm, prompt, stop=stop)
+        response = await llm_call(
+            llm,
+            prompt,
+            stop=stop,
+            llm_params={
+                "temperature": config.lowest_temperature,
+                "max_tokens": max_tokens,
+            },
+        )
 
         log.info(f"Output self-checking result is: `{response}`.")
 
@@ -83,11 +89,8 @@ async def self_check_output(
         if llm_task_manager.has_output_parser(task):
             result = llm_task_manager.parse_task_output(task, output=response)
         else:
-            result = llm_task_manager.parse_task_output(
-                task, output=response, forced_output_parser="is_content_safe"
-            )
+            result = llm_task_manager.parse_task_output(task, output=response, forced_output_parser="is_content_safe")
 
-        result = result.text
         is_safe = result[0]
 
         return is_safe

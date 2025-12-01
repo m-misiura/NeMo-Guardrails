@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +14,27 @@
 # limitations under the License.
 
 import asyncio
+from typing import TYPE_CHECKING, Optional
 
-from transformers.generation.streamers import TextStreamer
+TRANSFORMERS_AVAILABLE = True
+try:
+    from transformers.generation.streamers import (  # type: ignore[import-untyped]
+        TextStreamer,
+    )
+except ImportError:
+    # Fallback if transformers is not available
+    TRANSFORMERS_AVAILABLE = False
+
+    class TextStreamer:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs):
+            pass
 
 
-class AsyncTextIteratorStreamer(TextStreamer):
+if TYPE_CHECKING:
+    from transformers import AutoTokenizer  # type: ignore[import-untyped]
+
+
+class AsyncTextIteratorStreamer(TextStreamer):  # type: ignore[misc]
     """
     Simple async implementation for HuggingFace Transformers streamers.
 
@@ -26,16 +42,16 @@ class AsyncTextIteratorStreamer(TextStreamer):
     with minor modifications to make it async.
     """
 
-    def __init__(
-        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs
-    ):
+    def __init__(self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
-        self.text_queue = asyncio.Queue()
+        self.text_queue: asyncio.Queue[str] = asyncio.Queue()
         self.stop_signal = None
-        self.loop = None
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
+        if self.loop is None:
+            return
         if len(text) > 0:
             asyncio.run_coroutine_threadsafe(self.text_queue.put(text), self.loop)
 

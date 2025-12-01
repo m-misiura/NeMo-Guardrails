@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,22 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import logging
 import re
 from ast import literal_eval
-from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 
-from nemoguardrails.actions.llm.utils import get_and_clear_reasoning_trace_contextvar
 from nemoguardrails.llm.filters import (
     co_v2,
     colang,
     colang_without_identifiers,
-    extract_and_strip_trace,
     first_turns,
     indent,
     last_turns,
@@ -50,59 +46,9 @@ from nemoguardrails.llm.output_parsers import (
     user_intent_parser,
     verbose_v1_parser,
 )
-from nemoguardrails.llm.prompts import get_prompt, get_task_model
+from nemoguardrails.llm.prompts import get_prompt
 from nemoguardrails.llm.types import Task
 from nemoguardrails.rails.llm.config import MessageTemplate, RailsConfig
-
-
-def output_has_reasoning_traces(output: str, start_token: str, end_token: str) -> bool:
-    """Checks if the output string contains both start and end reasoning tokens."""
-    return start_token in output and end_token in output
-
-
-@dataclass
-class ParsedTaskOutput:
-    """
-    Encapsulates the result of running and parsing an LLM task.
-
-    Attributes:
-        text (str): The cleaned and parsed output string, representing
-            the main result of the task.
-        reasoning_trace (Optional[str]): An optional chain-of-thought
-            reasoning trace, providing insights into the reasoning
-            process behind the task output, if available.
-    """
-
-    text: str
-    reasoning_trace: Optional[str] = None
-
-
-def should_remove_reasoning_traces_from_output(config, task):
-    model = get_task_model(config, task)
-
-    model_config = (
-        model
-        and model.reasoning_config
-        and model.reasoning_config.remove_reasoning_traces
-    )
-
-    if config.rails.output.apply_to_reasoning_traces:
-        return False
-    else:
-        return model_config
-
-
-def get_reasoning_token_tags(config, task):
-    model = get_task_model(config, task)
-
-    if model and model.reasoning_config:
-        start_token = model.reasoning_config.start_token
-        end_token = model.reasoning_config.end_token
-    else:
-        start_token = None
-        end_token = None
-
-    return start_token, end_token
 
 
 class LLMTaskManager:
@@ -147,6 +93,8 @@ class LLMTaskManager:
     def _get_general_instructions(self):
         """Helper to extract the general instructions."""
         text = ""
+        if self.config.instructions is None:
+            return text
         for instruction in self.config.instructions:
             if instruction.type == "general":
                 text = instruction.content
@@ -155,70 +103,6 @@ class LLMTaskManager:
                 break
 
         return text
-
-    def _preprocess_events_for_prompt(
-        self, events: Optional[List[dict]]
-    ) -> Optional[List[dict]]:
-        """Remove reasoning traces from bot messages before rendering them in prompts.
-
-        This prevents reasoning traces from being included in LLM prompt history when
-        rails.output.apply_to_reasoning_traces=true is enabled.
-
-        Args:
-            events: The list of events to preprocess
-
-        Returns:
-            A new list of preprocessed events, or None if events was None
-        """
-        if not events:
-            return None
-
-        processed_events = copy.deepcopy(events)
-
-        for event in processed_events:
-            if (
-                isinstance(event, dict)
-                and event.get("type") == "BotMessage"
-                and "text" in event
-            ):
-                bot_utterance = event["text"]
-                for task in Task:
-                    start_token, end_token = get_reasoning_token_tags(self.config, task)
-                    if (
-                        start_token
-                        and end_token
-                        and output_has_reasoning_traces(
-                            bot_utterance, start_token, end_token
-                        )
-                    ):
-                        result = extract_and_strip_trace(
-                            bot_utterance, start_token, end_token
-                        )
-                        event["text"] = result.text
-                        break
-
-            elif (
-                isinstance(event, dict)
-                and event.get("type") == "StartUtteranceBotAction"
-                and "script" in event
-            ):
-                bot_utterance = event["script"]
-                for task in Task:
-                    start_token, end_token = get_reasoning_token_tags(self.config, task)
-                    if (
-                        start_token
-                        and end_token
-                        and output_has_reasoning_traces(
-                            bot_utterance, start_token, end_token
-                        )
-                    ):
-                        result = extract_and_strip_trace(
-                            bot_utterance, start_token, end_token
-                        )
-                        event["script"] = result.text
-                        break
-
-        return processed_events
 
     def _render_string(
         self,
@@ -234,9 +118,6 @@ class LLMTaskManager:
         :return: The rendered template.
         :rtype: str.
         """
-        # Preprocess events to remove reasoning traces from BotMessage events
-        processed_events = self._preprocess_events_for_prompt(events)
-
         template = self.env.from_string(template_str)
 
         # First, we extract all the variables from the template.
@@ -244,7 +125,7 @@ class LLMTaskManager:
 
         # This is the context that will be passed to the template when rendering.
         render_context = {
-            "history": processed_events,
+            "history": events,
             "general_instructions": self._get_general_instructions(),
             "sample_conversation": self.config.sample_conversation,
             "sample_conversation_two_turns": self.config.sample_conversation,
@@ -292,18 +173,14 @@ class LLMTaskManager:
         # If it's a MessageTemplate, we render it as a message.
         for message_template in message_templates:
             if isinstance(message_template, str):
-                str_messages = self._render_string(
-                    message_template, context=context, events=events
-                )
+                str_messages = self._render_string(message_template, context=context, events=events)
                 try:
                     new_messages = literal_eval(str_messages)
                 except SyntaxError:
                     raise ValueError(f"Invalid message template: {message_template}")
                 messages.extend(new_messages)
             else:
-                content = self._render_string(
-                    message_template.content, context=context, events=events
-                )
+                content = self._render_string(message_template.content, context=context, events=events)
 
                 # Don't add empty messages.
                 if content.strip():
@@ -333,9 +210,7 @@ class LLMTaskManager:
                     if isinstance(item, dict):
                         if item.get("type") == "text":
                             result_text += item.get("text", "") + "\n"
-                        elif item.get("type") == "image_url" and isinstance(
-                            item.get("image_url"), dict
-                        ):
+                        elif item.get("type") == "image_url" and isinstance(item.get("image_url"), dict):
                             # image_url items, only count a placeholder length
                             result_text += "[IMAGE_CONTENT]\n"
 
@@ -344,9 +219,7 @@ class LLMTaskManager:
                 base64_pattern = r"data:image/[^;]+;base64,[A-Za-z0-9+/=]+"
                 if re.search(base64_pattern, content):
                     # Replace base64 content with placeholder using regex
-                    result_text += (
-                        re.sub(base64_pattern, "[IMAGE_CONTENT]", content) + "\n"
-                    )
+                    result_text += re.sub(base64_pattern, "[IMAGE_CONTENT]", content) + "\n"
                 else:
                     result_text += content + "\n"
 
@@ -382,19 +255,13 @@ class LLMTaskManager:
         """
         prompt = get_prompt(self.config, task)
         if prompt.content:
-            task_prompt = self._render_string(
-                prompt.content, context=context, events=events
-            )
-            while len(task_prompt) > prompt.max_length:
+            task_prompt = self._render_string(prompt.content, context=context, events=events)
+            while prompt.max_length is not None and len(task_prompt) > prompt.max_length:
                 if not events:
-                    raise Exception(
-                        f"Prompt exceeds max length of {prompt.max_length} characters even without history"
-                    )
+                    raise Exception(f"Prompt exceeds max length of {prompt.max_length} characters even without history")
                 # Remove events from the beginning of the history until the prompt fits.
                 events = events[1:]
-                task_prompt = self._render_string(
-                    prompt.content, context=context, events=events
-                )
+                task_prompt = self._render_string(prompt.content, context=context, events=events)
 
             # Check if the output should be a user message, for chat models
             if force_string_to_message:
@@ -407,27 +274,24 @@ class LLMTaskManager:
 
             return task_prompt
         else:
-            task_messages = self._render_messages(
-                prompt.messages, context=context, events=events
-            )
+            if prompt.messages is None:
+                return []
+            task_messages = self._render_messages(prompt.messages, context=context, events=events)
             task_prompt_length = self._get_messages_text_length(task_messages)
-            while task_prompt_length > prompt.max_length:
+            while prompt.max_length is not None and task_prompt_length > prompt.max_length:
                 if not events:
-                    raise Exception(
-                        f"Prompt exceeds max length of {prompt.max_length} characters even without history"
-                    )
+                    raise Exception(f"Prompt exceeds max length of {prompt.max_length} characters even without history")
                 # Remove events from the beginning of the history until the prompt fits.
                 events = events[1:]
-                task_messages = self._render_messages(
-                    prompt.messages, context=context, events=events
-                )
+                if prompt.messages is not None:
+                    task_messages = self._render_messages(prompt.messages, context=context, events=events)
+                else:
+                    task_messages = []
                 task_prompt_length = self._get_messages_text_length(task_messages)
             return task_messages
 
-    def parse_task_output(
-        self, task: Task, output: str, forced_output_parser: Optional[str] = None
-    ) -> ParsedTaskOutput:
-        """Parses the output of a task, optionally extracting reasoning traces.
+    def parse_task_output(self, task: Task, output: str, forced_output_parser: Optional[str] = None) -> str:
+        """Parses the output of a task using the configured output parser.
 
         Args:
             task (Task): The task for which the output is being parsed.
@@ -435,30 +299,8 @@ class LLMTaskManager:
             forced_output_parser (Optional[str]): An optional parser name to force
 
         Returns:
-            ParsedTaskOutput: An object containing the parsed text (which may
-            include or exclude reasoning traces based on configuration) and
-            any reasoning trace.
+            str: The parsed text output.
         """
-        reasoning_trace: Optional[str] = None
-
-        # Get the tokens first to check for their presence
-        start_token, end_token = get_reasoning_token_tags(self.config, task)
-
-        # 1. strip and capture reasoning traces if configured and present
-        if (
-            start_token
-            and end_token
-            and output_has_reasoning_traces(output, start_token, end_token)
-        ):
-            reasoning_trace_result = extract_and_strip_trace(
-                output, start_token, end_token
-            )
-            reasoning_trace = reasoning_trace_result.reasoning_trace
-
-            if should_remove_reasoning_traces_from_output(self.config, task):
-                output = reasoning_trace_result.text
-
-        # 2. delegate to existing parser
         prompt = get_prompt(self.config, task)
         parser_name = forced_output_parser or prompt.output_parser
         parser_fn = self.output_parsers.get(parser_name)
@@ -469,7 +311,7 @@ class LLMTaskManager:
             logging.info("No output parser found for %s", prompt.output_parser)
             parsed_text = output
 
-        return ParsedTaskOutput(text=parsed_text, reasoning_trace=reasoning_trace)
+        return parsed_text
 
     def has_output_parser(self, task: Task):
         prompt = get_prompt(self.config, task)

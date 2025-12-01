@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +19,7 @@ from nemoguardrails import RailsConfig
 from nemoguardrails.llm.prompts import get_prompt
 from nemoguardrails.llm.types import Task
 
-CONFIGS_FOLDER = os.path.join(
-    os.path.dirname(__file__), ".", "test_configs", "with_prompt_modes"
-)
+CONFIGS_FOLDER = os.path.join(os.path.dirname(__file__), ".", "test_configs", "with_prompt_modes")
 TEST_CASES = [
     (
         "task1_openai_compact",

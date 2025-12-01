@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,6 @@
 
 import asyncio
 import json
-from json.decoder import JSONDecodeError
 from typing import AsyncIterator
 
 import pytest
@@ -88,27 +87,15 @@ def output_rails_streaming_config_default():
 
 
 @pytest.mark.asyncio
-async def test_stream_async_streaming_disabled(output_rails_streaming_config_default):
-    """Tests if stream_async returns a StreamingHandler instance when streaming is disabled"""
-
-    llmrails = LLMRails(output_rails_streaming_config_default)
-
-    result = llmrails.stream_async(prompt="test")
-    assert isinstance(
-        result, StreamingHandler
-    ), "Expected StreamingHandler instance when streaming is disabled"
-
-
-@pytest.mark.asyncio
 async def test_stream_async_streaming_enabled(output_rails_streaming_config):
     """Tests if stream_async returns does not return StreamingHandler instance when streaming is enabled"""
 
     llmrails = LLMRails(output_rails_streaming_config)
 
     result = llmrails.stream_async(prompt="test")
-    assert not isinstance(
-        result, StreamingHandler
-    ), "Did not expect StreamingHandler instance when streaming is enabled"
+    assert not isinstance(result, StreamingHandler), (
+        "Did not expect StreamingHandler instance when streaming is enabled"
+    )
 
 
 @action(is_system_action=True, output_mapping=lambda result: not result)
@@ -162,9 +149,7 @@ async def test_streaming_output_rails_blocked_explicit(output_rails_streaming_co
         }
     }
 
-    error_chunks = [
-        json.loads(chunk) for chunk in chunks if chunk.startswith('{"error":')
-    ]
+    error_chunks = [json.loads(chunk) for chunk in chunks if chunk.startswith('{"error":')]
     assert len(error_chunks) > 0
     assert expected_error in error_chunks
 
@@ -175,32 +160,20 @@ async def test_streaming_output_rails_blocked_explicit(output_rails_streaming_co
 async def test_streaming_output_rails_blocked_default_config(
     output_rails_streaming_config_default,
 ):
-    """Tests if output rails streaming default config do not block content with BLOCK keyword"""
+    """Tests that stream_async raises an error with default config (output rails without explicit streaming config)"""
 
-    # text with a BLOCK keyword
-    llm_completions = [
-        '  express greeting\nbot express greeting\n  "Hi, how are you doing?"',
-        '  "This is a [BLOCK] joke that should be blocked."',
-    ]
+    llmrails = LLMRails(output_rails_streaming_config_default)
 
-    chunks = await run_self_check_test(
-        output_rails_streaming_config_default, llm_completions
+    with pytest.raises(ValueError) as exc_info:
+        async for chunk in llmrails.stream_async(messages=[{"role": "user", "content": "Hi!"}]):
+            pass
+
+    assert str(exc_info.value) == (
+        "stream_async() cannot be used when output rails are configured but "
+        "rails.output.streaming.enabled is False. Either set "
+        "rails.output.streaming.enabled to True in your configuration, or use "
+        "generate_async() instead of stream_async()."
     )
-
-    expected_error = {
-        "error": {
-            "message": "Blocked by self check output rails.",
-            "type": "guardrails_violation",
-            "param": "self check output",
-            "code": "content_blocked",
-        }
-    }
-
-    error_chunks = [
-        json.loads(chunk) for chunk in chunks if chunk.startswith('{"error":')
-    ]
-    assert len(error_chunks) == 0
-    assert expected_error not in error_chunks
 
     await asyncio.gather(*asyncio.all_tasks() - {asyncio.current_task()})
 
@@ -227,27 +200,6 @@ async def test_streaming_output_rails_blocked_at_start(output_rails_streaming_co
 
     assert len(chunks) == 1
     assert json.loads(chunks[0]) == expected_error
-
-    await asyncio.gather(*asyncio.all_tasks() - {asyncio.current_task()})
-
-
-@pytest.mark.asyncio
-async def test_streaming_output_rails_default_config_not_blocked_at_start(
-    output_rails_streaming_config_default,
-):
-    """Tests blocking with BLOCK at the very beginning of the response does not return abort sse"""
-
-    llm_completions = [
-        '  express greeting\nbot express greeting\n  "Hi, how are you doing?"',
-        '  "[BLOCK] This should be blocked immediately at the start."',
-    ]
-
-    chunks = await run_self_check_test(
-        output_rails_streaming_config_default, llm_completions
-    )
-
-    with pytest.raises(JSONDecodeError):
-        json.loads(chunks[0])
 
     await asyncio.gather(*asyncio.all_tasks() - {asyncio.current_task()})
 
@@ -306,9 +258,7 @@ async def test_external_generator_with_output_rails_allowed():
                 }
             },
             "streaming": True,
-            "prompts": [
-                {"task": "self_check_output", "content": "Check: {{ bot_response }}"}
-            ],
+            "prompts": [{"task": "self_check_output", "content": "Check: {{ bot_response }}"}],
         },
         colang_content="""
         define flow self check output
@@ -352,9 +302,7 @@ async def test_external_generator_with_output_rails_blocked():
                 }
             },
             "streaming": True,
-            "prompts": [
-                {"task": "self_check_output", "content": "Check: {{ bot_response }}"}
-            ],
+            "prompts": [{"task": "self_check_output", "content": "Check: {{ bot_response }}"}],
         },
         colang_content="""
         define flow self check output
@@ -366,9 +314,7 @@ async def test_external_generator_with_output_rails_blocked():
 
     @action(name="self_check_output")
     async def self_check_output(**kwargs):
-        bot_message = kwargs.get(
-            "bot_message", kwargs.get("context", {}).get("bot_message", "")
-        )
+        bot_message = kwargs.get("bot_message", kwargs.get("context", {}).get("bot_message", ""))
         # block if message contains "offensive" or "idiot"
         if "offensive" in bot_message.lower() or "idiot" in bot_message.lower():
             return False
@@ -424,9 +370,7 @@ async def test_external_generator_with_custom_llm():
     messages = [{"role": "user", "content": "What's the weather?"}]
     tokens = []
 
-    async for token in rails.stream_async(
-        generator=custom_llm_generator(messages), messages=messages
-    ):
+    async for token in rails.stream_async(generator=custom_llm_generator(messages), messages=messages):
         tokens.append(token)
 
     result = "".join(tokens).strip()
@@ -480,9 +424,7 @@ async def test_external_generator_single_chunk():
                 }
             },
             "streaming": True,
-            "prompts": [
-                {"task": "self_check_output", "content": "Check: {{ bot_response }}"}
-            ],
+            "prompts": [{"task": "self_check_output", "content": "Check: {{ bot_response }}"}],
         },
         colang_content="""
         define flow self check output

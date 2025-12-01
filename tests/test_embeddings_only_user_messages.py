@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,13 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from unittest.mock import MagicMock
 
 import pytest
 
 from nemoguardrails import LLMRails, RailsConfig
 from nemoguardrails.actions.llm.utils import LLMCallException
-from nemoguardrails.llm.filters import colang
 from tests.utils import TestChat
 
 
@@ -205,7 +203,7 @@ def test_examples_included_in_prompts_2(colang_2_config):
 
     info = rails.explain()
     assert len(info.llm_calls) == 2
-    assert 'user said "hi"' in info.llm_calls[0].prompt
+    assert 'user said "Hi"' in info.llm_calls[0].prompt
 
 
 def test_no_llm_calls_embedding_only(colang_2_config):

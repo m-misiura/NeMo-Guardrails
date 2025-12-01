@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,13 +40,11 @@ def _create_mock_setup(llm_responses, parsed_result):
     llms = {"test_model": mock_llm}
 
     mock_task_manager = MagicMock()
-    mock_parsed_result = MagicMock()
-    mock_parsed_result.text = parsed_result
 
     mock_task_manager.render_task_prompt.return_value = "test prompt"
     mock_task_manager.get_stop_tokens.return_value = []
     mock_task_manager.get_max_tokens.return_value = 3
-    mock_task_manager.parse_task_output.return_value = mock_parsed_result
+    mock_task_manager.parse_task_output.return_value = parsed_result
 
     return llms, mock_task_manager
 
@@ -237,9 +235,7 @@ class TestIterableUnpackingIntegration:
             ("no", True, []),
         ],
     )
-    def test_iterable_unpacking_with_is_content_safe_outputs(
-        self, response, expected_safe, expected_violations
-    ):
+    def test_iterable_unpacking_with_is_content_safe_outputs(self, response, expected_safe, expected_violations):
         """Test iterable unpacking directly with is_content_safe parser outputs."""
         result = is_content_safe(response)
         is_safe, *violated_policies = result
@@ -264,9 +260,7 @@ class TestIterableUnpackingIntegration:
             ("invalid json", False, ["JSON parsing failed"]),
         ],
     )
-    def test_iterable_unpacking_with_nemoguard_outputs(
-        self, json_response, expected_safe, expected_violations
-    ):
+    def test_iterable_unpacking_with_nemoguard_outputs(self, json_response, expected_safe, expected_violations):
         """Test iterable unpacking directly with real NemoGuard parser outputs."""
         if "User Safety" in json_response or json_response == "invalid json":
             result = nemoguard_parse_prompt_safety(json_response)

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,10 +18,9 @@ import logging
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from uuid import UUID
 
-from langchain.callbacks.base import AsyncCallbackHandler
-from langchain.schema import BaseMessage
-from langchain.schema.messages import AIMessageChunk
-from langchain.schema.output import ChatGenerationChunk, GenerationChunk, LLMResult
+from langchain_core.callbacks.base import AsyncCallbackHandler
+from langchain_core.messages import AIMessageChunk, BaseMessage
+from langchain_core.outputs import ChatGenerationChunk, GenerationChunk, LLMResult
 
 from nemoguardrails.utils import new_uuid
 
@@ -223,11 +222,7 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
                     self.streaming_finished_event.set()
                     self.top_k_nonempty_lines_event.set()
             else:
-                if (
-                    self.enable_print
-                    and chunk is not None
-                    and chunk is not END_OF_STREAM
-                ):
+                if self.enable_print and chunk is not None and chunk is not END_OF_STREAM:
                     print(f"\033[92m{chunk}\033[0m", end="", flush=True)
 
                 # we only want to filter out empty strings that are created during suffix processing,
@@ -267,9 +262,7 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
         # if generation_info is not explicitly passed,
         # try to get it from the chunk itself if it's a GenerationChunk or ChatGenerationChunk
         if generation_info is None:
-            if isinstance(chunk, (GenerationChunk, ChatGenerationChunk)) and hasattr(
-                chunk, "generation_info"
-            ):
+            if isinstance(chunk, (GenerationChunk, ChatGenerationChunk)) and hasattr(chunk, "generation_info"):
                 if chunk.generation_info is not None:
                     generation_info = chunk.generation_info.copy()
 
@@ -333,14 +326,8 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
                 return
             else:
                 if chunk is END_OF_STREAM:
-                    if (
-                        self.current_chunk
-                        and self.suffix
-                        and self.current_chunk.endswith(self.suffix)
-                    ):
-                        self.current_chunk = self.current_chunk[
-                            0 : -1 * len(self.suffix)
-                        ]
+                    if self.current_chunk and self.suffix and self.current_chunk.endswith(self.suffix):
+                        self.current_chunk = self.current_chunk[0 : -1 * len(self.suffix)]
 
                 # only process the current_chunk if it's not empty
                 if self.current_chunk:
@@ -395,9 +382,7 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
         else:
             generation_info = {}
 
-        await self.push_chunk(
-            token if chunk is None else chunk, generation_info=generation_info
-        )
+        await self.push_chunk(token if chunk is None else chunk, generation_info=generation_info)
 
     async def on_llm_end(
         self,

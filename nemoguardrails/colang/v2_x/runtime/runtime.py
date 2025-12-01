@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,8 +20,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urljoin
 
 import aiohttp
-import langchain
-from langchain.chains.base import Chain
 
 from nemoguardrails.actions.actions import ActionResult
 from nemoguardrails.colang import parse_colang_file
@@ -44,8 +42,6 @@ from nemoguardrails.colang.v2_x.runtime.statemachine import (
 )
 from nemoguardrails.rails.llm.config import RailsConfig
 from nemoguardrails.utils import new_event_dict, new_readable_uuid
-
-langchain.debug = False
 
 log = logging.getLogger(__name__)
 
@@ -71,9 +67,7 @@ class RuntimeV2_x(Runtime):
         log.info("Start AddFlowsAction! %s", args)
         flow_content = args["config"]
         if not isinstance(flow_content, str):
-            raise ColangRuntimeError(
-                "Parameter 'config' in AddFlowsAction is not of type 'str'!"
-            )
+            raise ColangRuntimeError("Parameter 'config' in AddFlowsAction is not of type 'str'!")
         # Parse new flow
         try:
             parsed_flow = parse_colang_file(
@@ -90,10 +84,7 @@ class RuntimeV2_x(Runtime):
             )
 
             flow_name = flow_content.split("\n")[0].split(" ", maxsplit=1)[1]
-            fixed_body = (
-                f"flow {flow_name}\n"
-                + f'  bot say "Internal error on flow `{flow_name}`."'
-            )
+            fixed_body = f"flow {flow_name}\n" + f'  bot say "Internal error on flow `{flow_name}`."'
             log.warning("Using the following flow instead:\n%s", fixed_body)
 
             parsed_flow = parse_colang_file(
@@ -185,9 +176,7 @@ class RuntimeV2_x(Runtime):
 
         # TODO: check action is available in action server
         if fn is None:
-            result = self._internal_error_action_result(
-                f"Action '{action_name}' not found."
-            )
+            result = self._internal_error_action_result(f"Action '{action_name}' not found.")
         else:
             # We pass all the parameters that are passed explicitly to the action.
             kwargs = {**action_params}
@@ -202,12 +191,6 @@ class RuntimeV2_x(Runtime):
                 parameters = inspect.signature(fn).parameters
                 action_type = "function"
 
-            elif isinstance(fn, Chain):
-                # If we're dealing with a chain, we list the annotations
-                # TODO: make some additional type checking here
-                parameters = fn.input_keys
-                action_type = "chain"
-
             # For every parameter that start with "__context__", we pass the value
             for parameter_name in parameters:
                 if parameter_name.startswith("__context__"):
@@ -221,15 +204,9 @@ class RuntimeV2_x(Runtime):
                     if var_name in context:
                         kwargs[k] = context[var_name]
 
-            # If we have an action server, we use it for non-system/non-chain actions
-            if (
-                self.config.actions_server_url
-                and not action_meta.get("is_system_action")
-                and action_type != "chain"
-            ):
-                result, status = await self._get_action_resp(
-                    action_meta, action_name, kwargs
-                )
+            # If we have an action server, we use it for non-system actions
+            if self.config.actions_server_url and not action_meta.get("is_system_action"):
+                result, status = await self._get_action_resp(action_meta, action_name, kwargs)
             else:
                 # We don't send these to the actions server;
                 # TODO: determine if we should
@@ -253,23 +230,16 @@ class RuntimeV2_x(Runtime):
                     if k in parameters:
                         kwargs[k] = v
 
-                if (
-                    "llm" in kwargs
-                    and f"{action_name}_llm" in self.registered_action_params
-                ):
+                if "llm" in kwargs and f"{action_name}_llm" in self.registered_action_params:
                     kwargs["llm"] = self.registered_action_params[f"{action_name}_llm"]
 
                 log.info("Running action :: %s", action_name)
-                result, status = await self.action_dispatcher.execute_action(
-                    action_name, kwargs
-                )
+                result, status = await self.action_dispatcher.execute_action(action_name, kwargs)
 
             # If the action execution failed, we return a hardcoded message
             if status == "failed":
                 # TODO: make this message configurable.
-                result = self._internal_error_action_result(
-                    "I'm sorry, an internal error has occurred."
-                )
+                result = self._internal_error_action_result("I'm sorry, an internal error has occurred.")
 
         return_value = result
         return_events: List[dict] = []
@@ -297,17 +267,10 @@ class RuntimeV2_x(Runtime):
         try:
             # Call the Actions Server if it is available.
             # But not for system actions, those should still run locally.
-            if (
-                action_meta.get("is_system_action", False)
-                or self.config.actions_server_url is None
-            ):
-                result, status = await self.action_dispatcher.execute_action(
-                    action_name, kwargs
-                )
+            if action_meta.get("is_system_action", False) or self.config.actions_server_url is None:
+                result, status = await self.action_dispatcher.execute_action(action_name, kwargs)
             else:
-                url = urljoin(
-                    self.config.actions_server_url, "/v1/actions/run"
-                )  # action server execute action path
+                url = urljoin(self.config.actions_server_url, "/v1/actions/run")  # action server execute action path
                 data = {"action_name": action_name, "action_parameters": kwargs}
                 async with aiohttp.ClientSession() as session:
                     try:
@@ -323,15 +286,11 @@ class RuntimeV2_x(Runtime):
                                 resp.get("status", status),
                             )
                     except Exception as e:
-                        log.info(
-                            "Exception %s while making request to %s", e, action_name
-                        )
+                        log.info("Exception %s while making request to %s", e, action_name)
                         return result, status
 
         except Exception as e:
-            error_message = (
-                f"Failed to get response from {action_name} due to exception {e}"
-            )
+            error_message = f"Failed to get response from {action_name} due to exception {e}"
             log.info(error_message)
             raise ColangRuntimeError(error_message) from e
         return result, status
@@ -351,9 +310,7 @@ class RuntimeV2_x(Runtime):
             # is_system_action=action_meta.get("is_system_action", False),
         )
 
-    async def _get_async_actions_finished_events(
-        self, main_flow_uid: str
-    ) -> Tuple[List[dict], int]:
+    async def _get_async_actions_finished_events(self, main_flow_uid: str) -> Tuple[List[dict], int]:
         """Helper to return the ActionFinished events for the local async actions that finished.
 
         Args
@@ -434,9 +391,7 @@ class RuntimeV2_x(Runtime):
         local_running_actions: List[asyncio.Task[dict]] = []
 
         if state is None or state == {}:
-            state = State(
-                flow_states={}, flow_configs=self.flow_configs, rails_config=self.config
-            )
+            state = State(flow_states={}, flow_configs=self.flow_configs, rails_config=self.config)
             initialize_state(state)
         elif isinstance(state, dict):
             # TODO: Implement dict to State conversion
@@ -466,9 +421,7 @@ class RuntimeV2_x(Runtime):
                             "source_flow_instance_uid": main_flow_state.uid,
                             "flow_instance_uid": new_readable_uuid(flow_config.id),
                             "flow_hierarchy_position": f"0.0.{idx}",
-                            "source_head_uid": list(main_flow_state.heads.values())[
-                                0
-                            ].uid,
+                            "source_head_uid": list(main_flow_state.heads.values())[0].uid,
                             "activated": True,
                         },
                     )
@@ -492,9 +445,7 @@ class RuntimeV2_x(Runtime):
             for event in input_events:
                 events_counter += 1
                 if events_counter > self.max_events:
-                    log.critical(
-                        f"Maximum number of events reached ({events_counter})!"
-                    )
+                    log.critical(f"Maximum number of events reached ({events_counter})!")
                     return output_events, state
 
                 log.info("Processing event :: %s", event)
@@ -558,9 +509,7 @@ class RuntimeV2_x(Runtime):
                             if action_name == "UtteranceBotAction":
                                 extra["final_script"] = out_event["script"]
 
-                            action_finished_event = self._get_action_finished_event(
-                                finished_event_data, **extra
-                            )
+                            action_finished_event = self._get_action_finished_event(finished_event_data, **extra)
 
                             # We send the completion of the action as an output event
                             # and continue processing it.
@@ -570,9 +519,7 @@ class RuntimeV2_x(Runtime):
                         elif self.action_dispatcher.has_registered(action_name):
                             # In this case we need to start the action locally
                             action_fn = self.action_dispatcher.get_action(action_name)
-                            execute_async = getattr(action_fn, "action_meta", {}).get(
-                                "execute_async", False
-                            )
+                            execute_async = getattr(action_fn, "action_meta", {}).get("execute_async", False)
 
                             # Start the local action
                             local_action = asyncio.create_task(
@@ -588,11 +535,7 @@ class RuntimeV2_x(Runtime):
                             # we execute the actions as a local action.
                             # Also, if we're running this in blocking mode, we add all local
                             # actions as non-async.
-                            if (
-                                not execute_async
-                                or self.disable_async_execution
-                                or blocking
-                            ):
+                            if not execute_async or self.disable_async_execution or blocking:
                                 local_running_actions.append(local_action)
                             else:
                                 main_flow_uid = state.main_flow_state.uid
@@ -629,9 +572,7 @@ class RuntimeV2_x(Runtime):
                     "Waiting for %d local actions to finish.",
                     len(local_running_actions),
                 )
-                done, _pending = await asyncio.wait(
-                    local_running_actions, return_when=asyncio.FIRST_COMPLETED
-                )
+                done, _pending = await asyncio.wait(local_running_actions, return_when=asyncio.FIRST_COMPLETED)
                 log.info("%s actions finished.", len(done))
 
                 for finished_task in done:
@@ -645,14 +586,8 @@ class RuntimeV2_x(Runtime):
         if return_local_async_action_count:
             # If we have a "CheckLocalAsync" event, we return the number of
             # pending local async actions that have not yet finished executing
-            log.debug(
-                "Checking if there are any local async actions that have finished."
-            )
-            output_events.append(
-                new_event_dict(
-                    "LocalAsyncCounter", counter=pending_local_async_action_counter
-                )
-            )
+            log.debug("Checking if there are any local async actions that have finished.")
+            output_events.append(new_event_dict("LocalAsyncCounter", counter=pending_local_async_action_counter))
 
         # TODO: serialize the state to dict
 
@@ -679,9 +614,7 @@ class RuntimeV2_x(Runtime):
         # NOTE: To extract the actual parameters that should be passed to the local action,
         # we ignore all the keys from "an empty event" of the same type.
         ignore_keys = new_event_dict(start_action_event["type"]).keys()
-        action_params = {
-            k: v for k, v in start_action_event.items() if k not in ignore_keys
-        }
+        action_params = {k: v for k, v in start_action_event.items() if k not in ignore_keys}
 
         return_value, new_events, context_updates = await self._process_start_action(
             action_name,

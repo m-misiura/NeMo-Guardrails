@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,18 +27,14 @@ LIVE_TEST_MODE = os.environ.get("LIVE_TEST")
 
 @pytest.fixture
 def app():
-    config = RailsConfig.from_path(
-        os.path.join(CONFIGS_FOLDER, "with_kb_openai_embeddings")
-    )
+    config = RailsConfig.from_path(os.path.join(CONFIGS_FOLDER, "with_kb_openai_embeddings"))
 
     return LLMRails(config)
 
 
 @pytest.mark.skipif(not LIVE_TEST_MODE, reason="Not in live mode.")
 def test_custom_llm_registration(app):
-    assert isinstance(
-        app.llm_generation_actions.flows_index._model, FastEmbedEmbeddingModel
-    )
+    assert isinstance(app.llm_generation_actions.flows_index._model, FastEmbedEmbeddingModel)
 
     assert app.kb.index.embedding_engine == "openai"
     assert app.kb.index.embedding_model == "text-embedding-ada-002"
@@ -46,9 +42,7 @@ def test_custom_llm_registration(app):
 
 @pytest.mark.skipif(not LIVE_TEST_MODE, reason="Not in live mode.")
 def test_live_query(app):
-    result = app.generate(
-        messages=[{"role": "user", "content": "What is NeMo Guardrails?"}]
-    )
+    result = app.generate(messages=[{"role": "user", "content": "What is NeMo Guardrails?"}])
 
     assert result == {
         "content": "NeMo Guardrails is an open-source toolkit for easily adding "

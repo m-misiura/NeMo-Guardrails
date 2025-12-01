@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,15 +19,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from nemoguardrails import RailsConfig
+from nemoguardrails.imports import check_optional_dependency
 from nemoguardrails.rails.llm.options import GenerationOptions
 from tests.utils import TestChat
 
-try:
-    import langchain_openai
-
-    _has_langchain_openai = True
-except ImportError:
-    _has_langchain_openai = False
+_has_langchain_openai = check_optional_dependency("langchain_openai")
 
 _has_openai_key = bool(os.getenv("OPENAI_API_KEY"))
 
@@ -49,9 +45,7 @@ async def test_internal_error_stops_execution():
     config = RailsConfig.from_path(os.path.join(CONFIGS_FOLDER, "parallel_rails"))
 
     # mock the render_task_prompt method to raise an exception (simulating missing prompt)
-    with patch(
-        "nemoguardrails.llm.taskmanager.LLMTaskManager.render_task_prompt"
-    ) as mock_render:
+    with patch("nemoguardrails.llm.taskmanager.LLMTaskManager.render_task_prompt") as mock_render:
         mock_render.side_effect = Exception("Missing prompt for task: self_check_input")
 
         chat = TestChat(config, llm_completions=["Hello!"])
@@ -69,9 +63,7 @@ async def test_internal_error_stops_execution():
             for event in result.log.internal_events
             if event.get("type") == "BotIntent" and event.get("intent") == "stop"
         ]
-        assert (
-            len(stop_events) > 0
-        ), "Expected BotIntent stop event after internal error"
+        assert len(stop_events) > 0, "Expected BotIntent stop event after internal error"
 
 
 @pytest.mark.skipif(
@@ -79,69 +71,21 @@ async def test_internal_error_stops_execution():
     reason="langchain-openai not available",
 )
 @pytest.mark.asyncio
-async def test_content_safety_missing_prompt():
-    config_data = {
-        "instructions": [
-            {"type": "general", "content": "You are a helpful assistant."}
-        ],
-        "models": [
-            {"type": "main", "engine": "openai", "model": "gpt-3.5-turbo"},
-            {"type": "content_safety", "engine": "openai", "model": "gpt-3.5-turbo"},
-        ],
-        "rails": {
-            "input": {
-                "flows": [
-                    "content safety check input $model=content_safety",
-                    "self check input",
-                ],
-                "parallel": True,
-            }
-        },
-    }
-
-    config = RailsConfig.from_content(
-        config=config_data,
-        yaml_content="prompts:\n  - task: self_check_input\n    content: 'Is the user input safe? Answer Yes or No.'",
-    )
-
-    chat = TestChat(config, llm_completions=["Safe response"])
-    chat >> "test message"
-
-    result = await chat.app.generate_async(messages=chat.history, options=OPTIONS)
-
-    assert result is not None
-    assert "internal error" in result.response[0]["content"].lower()
-
-    stop_events = [
-        event
-        for event in result.log.internal_events
-        if event.get("type") == "BotIntent" and event.get("intent") == "stop"
-    ]
-    assert len(stop_events) > 0
-
-
-@pytest.mark.asyncio
 async def test_no_app_llm_request_on_internal_error():
     """Test that App LLM request is not sent when internal error occurs."""
     config = RailsConfig.from_path(os.path.join(CONFIGS_FOLDER, "parallel_rails"))
 
     # mock the render_task_prompt method to raise an exception
-    with patch(
-        "nemoguardrails.llm.taskmanager.LLMTaskManager.render_task_prompt"
-    ) as mock_render:
+    with patch("nemoguardrails.llm.taskmanager.LLMTaskManager.render_task_prompt") as mock_render:
         mock_render.side_effect = Exception("Missing prompt for task: self_check_input")
 
-        with patch(
-            "nemoguardrails.actions.llm.utils.llm_call", new_callable=AsyncMock
-        ) as mock_llm_call:
+        with patch("nemoguardrails.actions.llm.utils.llm_call", new_callable=AsyncMock) as mock_llm_call:
             mock_llm_call.return_value = "Mocked response"
 
             chat = TestChat(config, llm_completions=["Test response"])
             chat >> "test"
 
-            result = await chat.app.generate_async(
-                messages=chat.history, options=OPTIONS
-            )
+            result = await chat.app.generate_async(messages=chat.history, options=OPTIONS)
 
             # should get internal error response
             assert result is not None
@@ -149,9 +93,7 @@ async def test_no_app_llm_request_on_internal_error():
 
             # verify that the main LLM was NOT called (no App LLM request sent)
             # The LLM call should be 0 because execution stopped after internal error
-            assert (
-                mock_llm_call.call_count == 0
-            ), f"Expected 0 LLM calls, but got {mock_llm_call.call_count}"
+            assert mock_llm_call.call_count == 0, f"Expected 0 LLM calls, but got {mock_llm_call.call_count}"
 
             # verify BotIntent stop event was generated
             stop_events = [
@@ -159,51 +101,7 @@ async def test_no_app_llm_request_on_internal_error():
                 for event in result.log.internal_events
                 if event.get("type") == "BotIntent" and event.get("intent") == "stop"
             ]
-            assert (
-                len(stop_events) > 0
-            ), "Expected BotIntent stop event after internal error"
-
-
-@pytest.mark.asyncio
-async def test_content_safety_missing_model():
-    """Test content safety with missing model configuration."""
-    config_data = {
-        "instructions": [
-            {"type": "general", "content": "You are a helpful assistant."}
-        ],
-        "models": [
-            {"type": "main", "engine": "openai", "model": "gpt-3.5-turbo"}
-            # missing content_safety model
-        ],
-        "rails": {
-            "input": {
-                "flows": ["content safety check input $model=content_safety"],
-                "parallel": True,
-            }
-        },
-    }
-
-    config = RailsConfig.from_content(
-        config=config_data,
-        yaml_content="prompts:\n  - task: content_safety_check_input $model=content_safety\n    content: 'Check if this is safe: {{ user_input }}'",
-    )
-
-    chat = TestChat(config, llm_completions=["Response"])
-    chat >> "test message"
-
-    result = await chat.app.generate_async(messages=chat.history, options=OPTIONS)
-
-    # should get internal error due to missing model
-    assert result is not None
-    assert "internal error" in result.response[0]["content"].lower()
-
-    # verify stop event was generated
-    stop_events = [
-        event
-        for event in result.log.internal_events
-        if event.get("type") == "BotIntent" and event.get("intent") == "stop"
-    ]
-    assert len(stop_events) > 0
+            assert len(stop_events) > 0, "Expected BotIntent stop event after internal error"
 
 
 @pytest.mark.asyncio
@@ -266,9 +164,7 @@ async def test_internal_error_adds_three_specific_events():
     config = RailsConfig.from_path(os.path.join(CONFIGS_FOLDER, "parallel_rails"))
 
     # mock render_task_prompt to trigger an internal error
-    with patch(
-        "nemoguardrails.llm.taskmanager.LLMTaskManager.render_task_prompt"
-    ) as mock_render:
+    with patch("nemoguardrails.llm.taskmanager.LLMTaskManager.render_task_prompt") as mock_render:
         mock_render.side_effect = Exception("Test internal error")
 
         chat = TestChat(config, llm_completions=["Test response"])
@@ -279,38 +175,31 @@ async def test_internal_error_adds_three_specific_events():
         # find the BotIntent with "inform internal error occurred"
         error_event_index = None
         for i, event in enumerate(result.log.internal_events):
-            if (
-                event.get("type") == "BotIntent"
-                and event.get("intent") == "inform internal error occurred"
-            ):
+            if event.get("type") == "BotIntent" and event.get("intent") == "inform internal error occurred":
                 error_event_index = i
                 break
 
-        assert (
-            error_event_index is not None
-        ), "Expected BotIntent with intent='inform internal error occurred'"
+        assert error_event_index is not None, "Expected BotIntent with intent='inform internal error occurred'"
 
-        assert error_event_index + 3 < len(
-            result.log.internal_events
-        ), "Expected at least 4 events total for error handling"
+        assert error_event_index + 3 < len(result.log.internal_events), (
+            "Expected at least 4 events total for error handling"
+        )
 
         utterance_event = result.log.internal_events[error_event_index + 1]
-        assert (
-            utterance_event.get("type") == "StartUtteranceBotAction"
-        ), f"Expected StartUtteranceBotAction after error, got {utterance_event.get('type')}"
+        assert utterance_event.get("type") == "StartUtteranceBotAction", (
+            f"Expected StartUtteranceBotAction after error, got {utterance_event.get('type')}"
+        )
 
         hide_event = result.log.internal_events[error_event_index + 2]
-        assert (
-            hide_event.get("type") == "hide_prev_turn"
-        ), f"Expected hide_prev_turn after utterance, got {hide_event.get('type')}"
+        assert hide_event.get("type") == "hide_prev_turn", (
+            f"Expected hide_prev_turn after utterance, got {hide_event.get('type')}"
+        )
 
         stop_event = result.log.internal_events[error_event_index + 3]
-        assert (
-            stop_event.get("type") == "BotIntent"
-        ), f"Expected BotIntent after hide_prev_turn, got {stop_event.get('type')}"
-        assert (
-            stop_event.get("intent") == "stop"
-        ), f"Expected intent='stop', got {stop_event.get('intent')}"
+        assert stop_event.get("type") == "BotIntent", (
+            f"Expected BotIntent after hide_prev_turn, got {stop_event.get('type')}"
+        )
+        assert stop_event.get("intent") == "stop", f"Expected intent='stop', got {stop_event.get('intent')}"
 
 
 @pytest.mark.asyncio
@@ -338,26 +227,31 @@ async def test_action_execution_returns_failed():
             for event in result.log.internal_events
             if event.get("type") == "BotIntent" and event.get("intent") == "stop"
         ]
-        assert (
-            len(stop_events) > 0
-        ), "Expected BotIntent stop event after action failure"
+        assert len(stop_events) > 0, "Expected BotIntent stop event after action failure"
 
 
+@pytest.mark.skipif(
+    not _has_langchain_openai or not _has_openai_key,
+    reason="langchain-openai not available",
+)
 @pytest.mark.asyncio
 async def test_single_error_message_not_multiple():
     """Test that we get exactly one error message, not multiple for each failed rail.
 
     Before the fix, if we had multiple rails failing, we'd get multiple error messages.
     This test verifies we only get one error message even with multiple parallel rails.
+    Now with config-time validation, we provide valid config and trigger runtime failures.
     """
     config_data = {
-        "models": [{"type": "main", "engine": "openai", "model": "gpt-3.5-turbo"}],
+        "models": [
+            {"type": "main", "engine": "openai", "model": "gpt-3.5-turbo"},
+            {"type": "content_safety", "engine": "openai", "model": "gpt-3.5-turbo"},
+        ],
         "rails": {
             "input": {
                 "flows": [
                     "self check input",
                     "content safety check input $model=content_safety",
-                    "llama guard check input $model=llama_guard",
                 ],
                 "parallel": True,
             }
@@ -366,44 +260,47 @@ async def test_single_error_message_not_multiple():
             {
                 "task": "self_check_input",
                 "content": "Is the user input safe? Answer Yes or No.",
-            }
-            # missing prompts and models for content_safety and llama_guard
+            },
+            {
+                "task": "content_safety_check_input $model=content_safety",
+                "content": "Check content safety: {{ user_input }}",
+            },
         ],
     }
 
     config = RailsConfig.from_content(config=config_data)
 
-    chat = TestChat(config, llm_completions=["Test response"])
-    chat >> "test message"
+    with patch("nemoguardrails.llm.taskmanager.LLMTaskManager.render_task_prompt") as mock_render:
+        mock_render.side_effect = Exception("Runtime error in multiple rails")
 
-    result = await chat.app.generate_async(messages=chat.history, options=OPTIONS)
+        chat = TestChat(config, llm_completions=["Test response"])
+        chat >> "test message"
 
-    # should get exactly one response, not multiple
-    assert result is not None
-    assert len(result.response) == 1, f"Expected 1 response, got {len(result.response)}"
+        result = await chat.app.generate_async(messages=chat.history, options=OPTIONS)
 
-    # that single response should be an internal error
-    assert "internal error" in result.response[0]["content"].lower()
+        # should get exactly one response, not multiple
+        assert result is not None
+        assert len(result.response) == 1, f"Expected 1 response, got {len(result.response)}"
 
-    # count how many times "internal error" appears in the response
-    error_count = result.response[0]["content"].lower().count("internal error")
-    assert error_count == 1, f"Expected 1 'internal error' message, found {error_count}"
+        # that single response should be an internal error
+        assert "internal error" in result.response[0]["content"].lower()
 
-    # verify stop event was generated
-    stop_events = [
-        event
-        for event in result.log.internal_events
-        if event.get("type") == "BotIntent" and event.get("intent") == "stop"
-    ]
-    assert len(stop_events) >= 1, "Expected at least one BotIntent stop event"
+        # count how many times "internal error" appears in the response
+        error_count = result.response[0]["content"].lower().count("internal error")
+        assert error_count == 1, f"Expected 1 'internal error' message, found {error_count}"
 
-    # verify we don't have multiple StartUtteranceBotAction events with error messages
-    error_utterances = [
-        event
-        for event in result.log.internal_events
-        if event.get("type") == "StartUtteranceBotAction"
-        and "internal error" in event.get("script", "").lower()
-    ]
-    assert (
-        len(error_utterances) == 1
-    ), f"Expected 1 error utterance, found {len(error_utterances)}"
+        # verify stop event was generated
+        stop_events = [
+            event
+            for event in result.log.internal_events
+            if event.get("type") == "BotIntent" and event.get("intent") == "stop"
+        ]
+        assert len(stop_events) >= 1, "Expected at least one BotIntent stop event"
+
+        # verify we don't have multiple StartUtteranceBotAction events with error messages
+        error_utterances = [
+            event
+            for event in result.log.internal_events
+            if event.get("type") == "StartUtteranceBotAction" and "internal error" in event.get("script", "").lower()
+        ]
+        assert len(error_utterances) == 1, f"Expected 1 error utterance, found {len(error_utterances)}"

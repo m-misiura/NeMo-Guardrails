@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +14,15 @@
 # limitations under the License.
 
 """A Langchain LLM component for connecting to Triton + TensorRT LLM backend."""
+
 from __future__ import annotations
 
 import queue
 from functools import partial
 from typing import Any, Dict, List, Optional
 
-from langchain.callbacks.manager import CallbackManagerForLLMRun
-from langchain_core.language_models.llms import BaseLLM
+from langchain_core.callbacks.manager import CallbackManagerForLLMRun
+from langchain_core.language_models import BaseLLM
 from pydantic.v1 import Field, root_validator
 
 from nemoguardrails.llm.providers.trtllm.client import TritonClient
@@ -70,8 +71,7 @@ class TRTLLM(BaseLLM):
 
         except ImportError as err:
             raise ImportError(
-                "Could not import triton client python package. "
-                "Please install it with `pip install tritonclient[all]`."
+                "Could not import triton client python package. Please install it with `pip install tritonclient[all]`."
             ) from err
         return values
 
@@ -136,18 +136,14 @@ class TRTLLM(BaseLLM):
 
         result_queue: queue.Queue[Dict[str, str]] = queue.Queue()
         self.client.load_model(model_params["model_name"])
-        self.client.request_streaming(
-            model_params["model_name"], result_queue, **invocation_params
-        )
+        self.client.request_streaming(model_params["model_name"], result_queue, **invocation_params)
 
         response = ""
         send_tokens = True
         while True:
             response_streaming = result_queue.get()
 
-            if response_streaming is None or isinstance(
-                response_streaming, InferenceServerException
-            ):
+            if response_streaming is None or isinstance(response_streaming, InferenceServerException):
                 self.client.close_streaming()
                 break
             token = response_streaming["OUTPUT_0"]

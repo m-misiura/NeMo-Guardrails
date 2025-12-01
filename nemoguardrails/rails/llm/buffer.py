@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -111,9 +111,7 @@ class BufferStrategy(ABC):
         ...
 
     @abstractmethod
-    async def process_stream(
-        self, streaming_handler
-    ) -> AsyncGenerator[ChunkBatch, None]:
+    async def process_stream(self, streaming_handler) -> AsyncGenerator[ChunkBatch, None]:
         """Process streaming chunks and yield chunk batches.
 
         This is the main method that concrete buffer strategies must implement.
@@ -138,7 +136,8 @@ class BufferStrategy(ABC):
             ...     print(f"Processing: {context_formatted}")
             ...     print(f"User: {user_formatted}")
         """
-        ...
+        raise NotImplementedError
+        yield
 
     async def __call__(self, streaming_handler) -> AsyncGenerator[ChunkBatch, None]:
         """Callable interface that delegates to process_stream.
@@ -252,13 +251,9 @@ class RollingBuffer(BufferStrategy):
             >>> config = OutputRailsStreamingConfig(context_size=3, chunk_size=6)
             >>> buffer = RollingBuffer.from_config(config)
         """
-        return cls(
-            buffer_context_size=config.context_size, buffer_chunk_size=config.chunk_size
-        )
+        return cls(buffer_context_size=config.context_size, buffer_chunk_size=config.chunk_size)
 
-    async def process_stream(
-        self, streaming_handler
-    ) -> AsyncGenerator[ChunkBatch, None]:
+    async def process_stream(self, streaming_handler) -> AsyncGenerator[ChunkBatch, None]:
         """Process streaming chunks using rolling buffer strategy.
 
         This method implements the rolling buffer logic, accumulating chunks
@@ -302,14 +297,10 @@ class RollingBuffer(BufferStrategy):
 
             if len(buffer) >= self.buffer_chunk_size:
                 # calculate how many new chunks should be yielded
-                new_chunks_to_yield = min(
-                    self.buffer_chunk_size, total_chunks - self.total_yielded
-                )
+                new_chunks_to_yield = min(self.buffer_chunk_size, total_chunks - self.total_yielded)
 
                 # create the processing buffer (includes context)
-                processing_buffer = buffer[
-                    -self.buffer_chunk_size - self.buffer_context_size :
-                ]
+                processing_buffer = buffer[-self.buffer_chunk_size - self.buffer_context_size :]
 
                 # get the new chunks to yield to user (preserve original token format)
                 # the new chunks are at the end of the buffer
@@ -326,11 +317,7 @@ class RollingBuffer(BufferStrategy):
         if buffer:
             # calculate how many chunks from the remaining buffer haven't been yielded yet
             remaining_chunks_to_yield = total_chunks - self.total_yielded
-            chunks_to_yield = (
-                buffer[-remaining_chunks_to_yield:]
-                if remaining_chunks_to_yield > 0
-                else []
-            )
+            chunks_to_yield = buffer[-remaining_chunks_to_yield:] if remaining_chunks_to_yield > 0 else []
 
             yield ChunkBatch(
                 processing_context=buffer,

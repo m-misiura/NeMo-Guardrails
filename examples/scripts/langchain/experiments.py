@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +15,16 @@
 
 import os
 
-from langchain.chains import LLMMathChain
-from langchain.prompts import ChatPromptTemplate
+try:
+    from langchain.chains import LLMMathChain
+except ImportError as e:
+    raise ImportError(
+        "Failed to import required LangChain modules. "
+        "If you're using LangChain >= 1.0.0, ensure langchain-classic is installed. "
+        f"Original error: {e}"
+    ) from e
+
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import Tool
 from langchain_openai.chat_models import ChatOpenAI
 from pydantic import BaseModel, Field
@@ -98,9 +106,7 @@ def experiment_1():
 
 def experiment_2():
     """Basic setup invoking LLM rails directly."""
-    rails_config = RailsConfig.from_content(
-        yaml_content=YAML_CONTENT, colang_content=COLANG_CONTENT
-    )
+    rails_config = RailsConfig.from_content(yaml_content=YAML_CONTENT, colang_content=COLANG_CONTENT)
     rails = LLMRails(config=rails_config, llm=model)
 
     # print(rails.generate(messages=[{"role": "user", "content": "Hello!"}]))
@@ -112,9 +118,7 @@ def experiment_3():
 
     Wraps the model with a rails configuration
     """
-    rails_config = RailsConfig.from_content(
-        yaml_content=YAML_CONTENT, colang_content=COLANG_CONTENT
-    )
+    rails_config = RailsConfig.from_content(yaml_content=YAML_CONTENT, colang_content=COLANG_CONTENT)
     guardrails = RunnableRails(config=rails_config)
     model_with_rails = guardrails | model
 

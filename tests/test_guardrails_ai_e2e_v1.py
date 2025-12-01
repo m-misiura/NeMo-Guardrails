@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,28 +16,17 @@
 import pytest
 
 from nemoguardrails import LLMRails, RailsConfig
+from nemoguardrails.imports import check_optional_dependency
 from tests.utils import FakeLLM, TestChat
 
-try:
-    from guardrails import Guard
+GUARDRAILS_AVAILABLE = check_optional_dependency("guardrails")
+REGEX_MATCH_AVAILABLE = False
+VALID_LENGTH_AVAILABLE = False
 
-    GUARDRAILS_AVAILABLE = True
-
-    try:
-        from guardrails.hub import RegexMatch
-
-        REGEX_MATCH_AVAILABLE = True
-    except ImportError:
-        REGEX_MATCH_AVAILABLE = False
-
-    try:
-        from guardrails.hub import ValidLength
-
-        VALID_LENGTH_AVAILABLE = True
-    except ImportError:
-        VALID_LENGTH_AVAILABLE = False
-
-except ImportError:
+if GUARDRAILS_AVAILABLE:
+    REGEX_MATCH_AVAILABLE = check_optional_dependency("guardrails.hub")
+    VALID_LENGTH_AVAILABLE = check_optional_dependency("guardrails.hub")
+else:
     GUARDRAILS_AVAILABLE = False
     REGEX_MATCH_AVAILABLE = False
     VALID_LENGTH_AVAILABLE = False
@@ -233,9 +222,7 @@ class TestGuardrailsAIBlockingBehavior:
             yaml_content=INPUT_RAILS_ONLY_CONFIG_EXCEPTION,
         )
 
-        llm = FakeLLM(
-            responses=["  express greeting", "Hello! How can I help you today?"]
-        )
+        llm = FakeLLM(responses=["  express greeting", "Hello! How can I help you today?"])
 
         rails = LLMRails(config=config, llm=llm)
 
@@ -243,10 +230,7 @@ class TestGuardrailsAIBlockingBehavior:
 
         assert result["role"] == "exception"
         assert result["content"]["type"] == "GuardrailsAIException"
-        assert (
-            "Guardrails AI regex_match validation failed"
-            in result["content"]["message"]
-        )
+        assert "Guardrails AI regex_match validation failed" in result["content"]["message"]
 
     @pytest.mark.skipif(
         not GUARDRAILS_AVAILABLE or not REGEX_MATCH_AVAILABLE,
@@ -254,9 +238,7 @@ class TestGuardrailsAIBlockingBehavior:
     )
     def test_input_rails_only_validation_blocks_with_refuse(self):
         """Test input rails when validation fails - blocked with bot refuse."""
-        config = RailsConfig.from_content(
-            colang_content=COLANG_CONTENT, yaml_content=INPUT_RAILS_ONLY_CONFIG_REFUSE
-        )
+        config = RailsConfig.from_content(colang_content=COLANG_CONTENT, yaml_content=INPUT_RAILS_ONLY_CONFIG_REFUSE)
 
         chat = TestChat(
             config,
@@ -322,10 +304,7 @@ class TestGuardrailsAIBlockingBehavior:
 
         assert result["role"] == "exception"
         assert result["content"]["type"] == "GuardrailsAIException"
-        assert (
-            "Guardrails AI valid_length validation failed"
-            in result["content"]["message"]
-        )
+        assert "Guardrails AI valid_length validation failed" in result["content"]["message"]
 
     @pytest.mark.skipif(
         not GUARDRAILS_AVAILABLE or not VALID_LENGTH_AVAILABLE,
@@ -357,9 +336,7 @@ class TestGuardrailsAIBlockingBehavior:
         assert "can't" in chat.history[1]["content"].lower()
 
     @pytest.mark.skipif(
-        not GUARDRAILS_AVAILABLE
-        or not REGEX_MATCH_AVAILABLE
-        or not VALID_LENGTH_AVAILABLE,
+        not GUARDRAILS_AVAILABLE or not REGEX_MATCH_AVAILABLE or not VALID_LENGTH_AVAILABLE,
         reason="Guardrails, RegexMatch, or ValidLength validator not installed",
     )
     def test_input_and_output_rails_both_pass(self):
@@ -398,9 +375,7 @@ class TestGuardrailsAIBlockingBehavior:
             yaml_content=INPUT_AND_OUTPUT_RAILS_CONFIG_EXCEPTION,
         )
 
-        llm = FakeLLM(
-            responses=["  express greeting", "general response", "Hello! How are you?"]
-        )
+        llm = FakeLLM(responses=["  express greeting", "general response", "Hello! How are you?"])
 
         rails = LLMRails(config=config, llm=llm)
 
@@ -408,15 +383,10 @@ class TestGuardrailsAIBlockingBehavior:
 
         assert result["role"] == "exception"
         assert result["content"]["type"] == "GuardrailsAIException"
-        assert (
-            "Guardrails AI regex_match validation failed"
-            in result["content"]["message"]
-        )
+        assert "Guardrails AI regex_match validation failed" in result["content"]["message"]
 
     @pytest.mark.skipif(
-        not GUARDRAILS_AVAILABLE
-        or not REGEX_MATCH_AVAILABLE
-        or not VALID_LENGTH_AVAILABLE,
+        not GUARDRAILS_AVAILABLE or not REGEX_MATCH_AVAILABLE or not VALID_LENGTH_AVAILABLE,
         reason="Guardrails, RegexMatch, or ValidLength validator not installed",
     )
     def test_input_and_output_rails_output_blocks_with_exception(self):
@@ -440,10 +410,7 @@ class TestGuardrailsAIBlockingBehavior:
 
         assert result["role"] == "exception"
         assert result["content"]["type"] == "GuardrailsAIException"
-        assert (
-            "Guardrails AI valid_length validation failed"
-            in result["content"]["message"]
-        )
+        assert "Guardrails AI valid_length validation failed" in result["content"]["message"]
 
     def test_config_structures_are_valid(self):
         """Test that all config structures parse correctly."""

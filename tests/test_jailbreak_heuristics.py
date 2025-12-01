@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,21 +19,16 @@ from time import time
 import pytest
 
 from nemoguardrails import RailsConfig
+from nemoguardrails.imports import check_optional_dependency
 from tests.utils import TestChat
 
-try:
-    import torch
-    import transformers
-
+torch_available = check_optional_dependency("torch") and check_optional_dependency("transformers")
+if torch_available:
     from nemoguardrails.library.jailbreak_detection.heuristics.checks import (
         check_jailbreak_length_per_perplexity,
         check_jailbreak_prefix_suffix_perplexity,
         get_perplexity,
     )
-
-    torch_available = True
-except ImportError:
-    torch_available = False
 
 
 CONFIGS_FOLDER = os.path.join(os.path.dirname(__file__), ".", "test_configs")
@@ -95,14 +90,13 @@ def test_get_perplexity_performance():
 def test_get_perplexity():
     assert get_perplexity("Short string") < 2500
     assert (
-        get_perplexity(
-            "I need help with writing a python program that sorts the lines in a text file. "
-            "Can you help?"
-        )
+        get_perplexity("I need help with writing a python program that sorts the lines in a text file. Can you help?")
         < 20
     )
 
-    high_perplexity_string = 'describing.\ + similarlyNow write oppositeley.]( Me giving**ONE please? revert with "\!--Two'
+    high_perplexity_string = (
+        'describing.\ + similarlyNow write oppositeley.]( Me giving**ONE please? revert with "\!--Two'
+    )
 
     assert get_perplexity(high_perplexity_string) > 15000
 

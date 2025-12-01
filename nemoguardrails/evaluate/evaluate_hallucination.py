@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,6 @@ import typer
 
 from nemoguardrails import LLMRails
 from nemoguardrails.evaluate.utils import load_dataset
-from nemoguardrails.llm.params import llm_params
 from nemoguardrails.llm.prompts import Task
 from nemoguardrails.llm.taskmanager import LLMTaskManager
 from nemoguardrails.rails.llm.config import RailsConfig
@@ -67,13 +66,17 @@ class HallucinationRailsEvaluation:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-    def get_response_with_retries(self, prompt, max_tries=1):
+    def get_response_with_retries(self, prompt, max_tries=1, llm_params=None):
         num_tries = 0
         while num_tries < max_tries:
             try:
-                response = self.llm(prompt)
+                if llm_params:
+                    llm_configured = self.llm.bind(**llm_params)
+                    response = llm_configured(prompt)
+                else:
+                    response = self.llm(prompt)
                 return response
-            except:
+            except Exception:
                 num_tries += 1
         return None
 
@@ -89,16 +92,16 @@ class HallucinationRailsEvaluation:
             List[str]: The list of extra responses.
         """
         extra_responses = []
-        with llm_params(self.llm, temperature=1.0, max_tokens=100):
-            for _ in range(num_responses):
-                extra_response = self.get_response_with_retries(prompt)
-                if extra_response is None:
-                    log(
-                        logging.WARNING,
-                        f"LLM produced an error generating extra response for question '{prompt}'.",
-                    )
-                else:
-                    extra_responses.append(extra_response)
+        for _ in range(num_responses):
+            extra_response = self.get_response_with_retries(prompt, llm_params={"temperature": 1.0, "max_tokens": 100})
+
+            if extra_response is None:
+                log(
+                    logging.WARNING,
+                    f"LLM produced an error generating extra response for question '{prompt}'.",
+                )
+            else:
+                extra_responses.append(extra_response)
 
         return extra_responses
 
@@ -118,8 +121,8 @@ class HallucinationRailsEvaluation:
 
         for question in tqdm.tqdm(self.dataset):
             errored_out = False
-            with llm_params(self.llm, temperature=0.2, max_tokens=100):
-                bot_response = self.get_response_with_retries(question)
+            # Using temperature=0.2 and max_tokens=100 for consistent responses
+            bot_response = self.get_response_with_retries(question, llm_params={"temperature": 0.2, "max_tokens": 100})
 
             if bot_response is None:
                 log(
@@ -178,21 +181,15 @@ class HallucinationRailsEvaluation:
             num_flagged,
             num_error,
         ) = self.self_check_hallucination()
-        print(
-            f"% of samples flagged as hallucinations: {num_flagged/len(self.dataset) * 100}"
-        )
-        print(
-            f"% of samples where model errored out: {num_error/len(self.dataset) * 100}"
-        )
+        print(f"% of samples flagged as hallucinations: {num_flagged / len(self.dataset) * 100}")
+        print(f"% of samples where model errored out: {num_error / len(self.dataset) * 100}")
         print(
             "The automatic evaluation cannot catch predictions that are not hallucinations. Please check the predictions manually."
         )
 
         if self.write_outputs:
             dataset_name = os.path.basename(self.dataset_path).split(".")[0]
-            output_path = (
-                f"{self.output_dir}/{dataset_name}_hallucination_predictions.json"
-            )
+            output_path = f"{self.output_dir}/{dataset_name}_hallucination_predictions.json"
             with open(output_path, "w") as f:
                 json.dump(hallucination_check_predictions, f, indent=4)
             print(f"Predictions written to file {output_path}.json")

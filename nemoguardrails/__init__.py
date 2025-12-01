@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,9 +32,7 @@ from .rails import LLMRails, RailsConfig
 patch_asyncio.apply()
 
 # Ignore a warning message from torch.
-warnings.filterwarnings(
-    "ignore", category=UserWarning, message="TypedStorage is deprecated"
-)
+warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
 
 __version__ = version("nemoguardrails")
 __all__ = ["LLMRails", "RailsConfig"]

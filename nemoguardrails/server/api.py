@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,7 @@ import re
 import time
 import warnings
 from contextlib import asynccontextmanager
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,14 +42,32 @@ from nemoguardrails.streaming import StreamingHandler
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+
+class GuardrailsApp(FastAPI):
+    """Custom FastAPI subclass with additional attributes for Guardrails server."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize custom attributes
+        self.default_config_id: Optional[str] = None
+        self.rails_config_path: str = ""
+        self.disable_chat_ui: bool = False
+        self.auto_reload: bool = False
+        self.stop_signal: bool = False
+        self.single_config_mode: bool = False
+        self.single_config_id: Optional[str] = None
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.task: Optional[asyncio.Future] = None
+
+
 # The list of registered loggers. Can be used to send logs to various
 # backends and storage engines.
-registered_loggers = []
+registered_loggers: List[Callable] = []
 
 api_description = """Guardrails Sever API."""
 
 # The headers for each request
-api_request_headers = contextvars.ContextVar("headers")
+api_request_headers: contextvars.ContextVar = contextvars.ContextVar("headers")
 
 # The datastore that the Server should use.
 # This is currently used only for storing threads.
@@ -59,7 +77,7 @@ datastore: Optional[DataStore] = None
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: GuardrailsApp):
     # Startup logic here
     """Register any additional challenges, if available at startup."""
     challenges_files = os.path.join(app.rails_config_path, "challenges.json")
@@ -70,9 +88,9 @@ async def lifespan(app: FastAPI):
 
     # If there is a `config.yml` in the root `app.rails_config_path`, then
     # that means we are in single config mode.
-    if os.path.exists(
-        os.path.join(app.rails_config_path, "config.yml")
-    ) or os.path.exists(os.path.join(app.rails_config_path, "config.yaml")):
+    if os.path.exists(os.path.join(app.rails_config_path, "config.yml")) or os.path.exists(
+        os.path.join(app.rails_config_path, "config.yaml")
+    ):
         app.single_config_mode = True
         app.single_config_id = os.path.basename(app.rails_config_path)
     else:
@@ -82,8 +100,11 @@ async def lifespan(app: FastAPI):
         if os.path.exists(filepath):
             filename = os.path.basename(filepath)
             spec = importlib.util.spec_from_file_location(filename, filepath)
-            config_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(config_module)
+            if spec is not None and spec.loader is not None:
+                config_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(config_module)
+            else:
+                config_module = None
 
             # If there is an `init` function, we call it with the reference to the app.
             if config_module is not None and hasattr(config_module, "init"):
@@ -110,6 +131,7 @@ async def lifespan(app: FastAPI):
 
     if app.auto_reload:
         app.loop = asyncio.get_running_loop()
+        # Store the future directly as task
         app.task = app.loop.run_in_executor(None, start_auto_reload_monitoring)
 
     yield
@@ -117,14 +139,14 @@ async def lifespan(app: FastAPI):
     # Shutdown logic here
     if app.auto_reload:
         app.stop_signal = True
-        if hasattr(app, "task"):
+        if hasattr(app, "task") and app.task is not None:
             app.task.cancel()
         log.info("Shutting down file observer")
     else:
         pass
 
 
-app = FastAPI(
+app = GuardrailsApp(
     title="Guardrails Server API",
     description=api_description,
     version="0.1.0",
@@ -175,8 +197,7 @@ class RequestBody(BaseModel):
     )
     config_ids: Optional[List[str]] = Field(
         default=None,
-        description="The list of configuration ids to be used. "
-        "If set, the configurations will be combined.",
+        description="The list of configuration ids to be used. If set, the configurations will be combined.",
         # alias="guardrails",
         validate_default=True,
     )
@@ -186,7 +207,7 @@ class RequestBody(BaseModel):
         max_length=255,
         description="The id of an existing thread to which the messages should be added.",
     )
-    messages: List[dict] = Field(
+    messages: Optional[List[dict]] = Field(
         default=None, description="The list of messages in the current conversation."
     )
     context: Optional[dict] = Field(
@@ -212,15 +233,11 @@ class RequestBody(BaseModel):
     def ensure_config_id(cls, data: Any) -> Any:
         if isinstance(data, dict):
             if data.get("config_id") is not None and data.get("config_ids") is not None:
-                raise ValueError(
-                    "Only one of config_id or config_ids should be specified"
-                )
+                raise ValueError("Only one of config_id or config_ids should be specified")
             if data.get("config_id") is None and data.get("config_ids") is not None:
                 data["config_id"] = None
             if data.get("config_id") is None and data.get("config_ids") is None:
-                warnings.warn(
-                    "No config_id or config_ids provided, using default config_id"
-                )
+                warnings.warn("No config_id or config_ids provided, using default config_id")
         return data
 
     @validator("config_ids", pre=True, always=True)
@@ -232,9 +249,7 @@ class RequestBody(BaseModel):
 
 
 class ResponseBody(BaseModel):
-    messages: List[dict] = Field(
-        default=None, description="The new messages in the conversation"
-    )
+    messages: Optional[List[dict]] = Field(default=None, description="The new messages in the conversation")
     llm_output: Optional[dict] = Field(
         default=None,
         description="Contains any additional output coming from the LLM.",
@@ -243,9 +258,7 @@ class ResponseBody(BaseModel):
         default=None,
         description="The output data, i.e. a dict with the values corresponding to the `output_vars`.",
     )
-    log: Optional[GenerationLog] = Field(
-        default=None, description="Additional logging information."
-    )
+    log: Optional[GenerationLog] = Field(default=None, description="Additional logging information.")
     state: Optional[dict] = Field(
         default=None,
         description="A state object that should be used to continue the interaction in the future.",
@@ -282,8 +295,8 @@ async def get_rails_configs():
 
 
 # One instance of LLMRails per config id
-llm_rails_instances = {}
-llm_rails_events_history_cache = {}
+llm_rails_instances: dict[str, LLMRails] = {}
+llm_rails_events_history_cache: dict[str, dict] = {}
 
 
 def _generate_cache_key(config_ids: List[str]) -> str:
@@ -310,7 +323,7 @@ def _get_rails(config_ids: List[str]) -> LLMRails:
         # get the same thing.
         config_ids = [""]
 
-    full_llm_rails_config = None
+    full_llm_rails_config: Optional[RailsConfig] = None
 
     for config_id in config_ids:
         base_path = os.path.abspath(app.rails_config_path)
@@ -330,13 +343,14 @@ def _get_rails(config_ids: List[str]) -> LLMRails:
         else:
             full_llm_rails_config += rails_config
 
+    if full_llm_rails_config is None:
+        raise ValueError("No valid rails configuration found.")
+
     llm_rails = LLMRails(config=full_llm_rails_config, verbose=True)
     llm_rails_instances[configs_cache_key] = llm_rails
 
     # If we have a cache for the events, we restore it
-    llm_rails.events_history_cache = llm_rails_events_history_cache.get(
-        configs_cache_key, {}
-    )
+    llm_rails.events_history_cache = llm_rails_events_history_cache.get(configs_cache_key, {})
 
     return llm_rails
 
@@ -353,37 +367,36 @@ async def chat_completion(body: RequestBody, request: Request):
     """
     log.info("Got request for config %s", body.config_id)
     for logger in registered_loggers:
-        asyncio.get_event_loop().create_task(
-            logger({"endpoint": "/v1/chat/completions", "body": body.json()})
-        )
+        asyncio.get_event_loop().create_task(logger({"endpoint": "/v1/chat/completions", "body": body.json()}))
 
     # Save the request headers in a context variable.
     api_request_headers.set(request.headers)
 
+    # Use Request config_ids if set, otherwise use the FastAPI default config.
+    # If neither is available we can't generate any completions as we have no config_id
     config_ids = body.config_ids
-    if not config_ids and app.default_config_id:
-        config_ids = [app.default_config_id]
-    elif not config_ids and not app.default_config_id:
-        raise GuardrailsConfigurationError(
-            "No 'config_id' provided and no default configuration is set for the server. "
-            "You must set a 'config_id' in your request or set use --default-config-id when . "
-        )
+    if not config_ids:
+        if app.default_config_id:
+            config_ids = [app.default_config_id]
+        else:
+            raise GuardrailsConfigurationError("No request config_ids provided and server has no default configuration")
+
     try:
         llm_rails = _get_rails(config_ids)
     except ValueError as ex:
         log.exception(ex)
-        return {
-            "messages": [
+        return ResponseBody(
+            messages=[
                 {
                     "role": "assistant",
                     "content": f"Could not load the {config_ids} guardrails configuration. "
                     f"An internal error has occurred.",
                 }
             ]
-        }
+        )
 
     try:
-        messages = body.messages
+        messages = body.messages or []
         if body.context:
             messages.insert(0, {"role": "context", "content": body.context})
 
@@ -396,14 +409,14 @@ async def chat_completion(body: RequestBody, request: Request):
 
             # We make sure the `thread_id` meets the minimum complexity requirement.
             if len(body.thread_id) < 16:
-                return {
-                    "messages": [
+                return ResponseBody(
+                    messages=[
                         {
                             "role": "assistant",
                             "content": "The `thread_id` must have a minimum length of 16 characters.",
                         }
                     ]
-                }
+                )
 
             # Fetch the existing thread messages. For easier management, we prepend
             # the string `thread-` to all thread keys.
@@ -413,11 +426,7 @@ async def chat_completion(body: RequestBody, request: Request):
             # And prepend them.
             messages = thread_messages + messages
 
-        if (
-            body.stream
-            and llm_rails.config.streaming_supported
-            and llm_rails.main_llm_supports_streaming
-        ):
+        if body.stream and llm_rails.config.streaming_supported and llm_rails.main_llm_supports_streaming:
             # Create the streaming handler instance
             streaming_handler = StreamingHandler()
 
@@ -435,37 +444,38 @@ async def chat_completion(body: RequestBody, request: Request):
 
             return StreamingResponse(streaming_handler)
         else:
-            res = await llm_rails.generate_async(
-                messages=messages, options=body.options, state=body.state
-            )
+            res = await llm_rails.generate_async(messages=messages, options=body.options, state=body.state)
 
             if isinstance(res, GenerationResponse):
-                bot_message = res.response[0]
+                bot_message_content = res.response[0]
+                # Ensure bot_message is always a dict
+                if isinstance(bot_message_content, str):
+                    bot_message = {"role": "assistant", "content": bot_message_content}
+                else:
+                    bot_message = bot_message_content
             else:
                 assert isinstance(res, dict)
                 bot_message = res
 
             # If we're using threads, we also need to update the data before returning
             # the message.
-            if body.thread_id:
+            if body.thread_id and datastore is not None and datastore_key is not None:
                 await datastore.set(datastore_key, json.dumps(messages + [bot_message]))
 
-            result = {"messages": [bot_message]}
+            result = ResponseBody(messages=[bot_message])
 
             # If we have additional GenerationResponse fields, we return as well
             if isinstance(res, GenerationResponse):
-                result["llm_output"] = res.llm_output
-                result["output_data"] = res.output_data
-                result["log"] = res.log
-                result["state"] = res.state
+                result.llm_output = res.llm_output
+                result.output_data = res.output_data
+                result.log = res.log
+                result.state = res.state
 
             return result
 
     except Exception as ex:
         log.exception(ex)
-        return {
-            "messages": [{"role": "assistant", "content": "Internal server error."}]
-        }
+        return ResponseBody(messages=[{"role": "assistant", "content": "Internal server error."}])
 
 
 # By default, there are no challenges
@@ -498,7 +508,7 @@ def register_datastore(datastore_instance: DataStore):
     datastore = datastore_instance
 
 
-def register_logger(logger: callable):
+def register_logger(logger: Callable):
     """Register an additional logger"""
     registered_loggers.append(logger)
 
@@ -510,18 +520,16 @@ def start_auto_reload_monitoring():
         from watchdog.observers import Observer
 
         class Handler(FileSystemEventHandler):
-            @staticmethod
-            def on_any_event(event):
+            def on_any_event(self, event):
                 if event.is_directory:
                     return None
 
                 elif event.event_type == "created" or event.event_type == "modified":
-                    log.info(
-                        f"Watchdog received {event.event_type} event for file {event.src_path}"
-                    )
+                    log.info(f"Watchdog received {event.event_type} event for file {event.src_path}")
 
                     # Compute the relative path
-                    rel_path = os.path.relpath(event.src_path, app.rails_config_path)
+                    src_path_str = str(event.src_path)
+                    rel_path = os.path.relpath(src_path_str, app.rails_config_path)
 
                     # The config_id is the first component
                     parts = rel_path.split(os.path.sep)
@@ -530,7 +538,7 @@ def start_auto_reload_monitoring():
                     if (
                         not parts[-1].startswith(".")
                         and ".ipynb_checkpoints" not in parts
-                        and os.path.isfile(event.src_path)
+                        and os.path.isfile(src_path_str)
                     ):
                         # We just remove the config from the cache so that a new one is used next time
                         if config_id in llm_rails_instances:
@@ -541,9 +549,7 @@ def start_auto_reload_monitoring():
                                 # We save the events history cache, to restore it on the new instance
                                 llm_rails_events_history_cache[config_id] = val
 
-                            log.info(
-                                f"Configuration {config_id} has changed. Clearing cache."
-                            )
+                            log.info(f"Configuration {config_id} has changed. Clearing cache.")
 
         observer = Observer()
         event_handler = Handler()
@@ -558,10 +564,7 @@ def start_auto_reload_monitoring():
 
     except ImportError:
         # Since this is running in a separate thread, we just print the error.
-        print(
-            "The auto-reload feature requires `watchdog`. "
-            "Please install using `pip install watchdog`."
-        )
+        print("The auto-reload feature requires `watchdog`. Please install using `pip install watchdog`.")
         # Force close everything.
         os._exit(-1)
 

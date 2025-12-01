@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,14 +23,10 @@ import pytest
 
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions import action
+from nemoguardrails.imports import check_optional_dependency
 from tests.utils import TestChat
 
-try:
-    import langchain_openai
-
-    _has_langchain_openai = True
-except ImportError:
-    _has_langchain_openai = False
+_has_langchain_openai = check_optional_dependency("langchain_openai")
 
 _has_openai_key = bool(os.getenv("OPENAI_API_KEY"))
 
@@ -49,77 +45,11 @@ def find_internal_error_chunks(chunks):
     for chunk in chunks:
         try:
             parsed = json.loads(chunk)
-            if (
-                "error" in parsed
-                and parsed["error"].get("code") == "rail_execution_failure"
-            ):
+            if "error" in parsed and parsed["error"].get("code") == "rail_execution_failure":
                 error_chunks.append(parsed)
         except JSONDecodeError:
             continue
     return error_chunks
-
-
-@pytest.mark.skipif(
-    not _has_langchain_openai or not _has_openai_key,
-    reason="langchain-openai not available",
-)
-@pytest.mark.asyncio
-async def test_streaming_missing_prompt_internal_error():
-    """Test streaming internal error when content safety prompt is missing."""
-
-    config = RailsConfig.from_content(
-        config={
-            "models": [
-                {"type": "main", "engine": "openai", "model": "gpt-3.5-turbo"},
-                {
-                    "type": "content_safety",
-                    "engine": "openai",
-                    "model": "gpt-3.5-turbo",
-                },
-            ],
-            "rails": {
-                "output": {
-                    "parallel": True,
-                    "flows": ["content safety check output $model=content_safety"],
-                    "streaming": {
-                        "enabled": True,
-                        "chunk_size": 4,
-                    },
-                }
-            },
-        },
-        colang_content="""
-        define user express greeting
-          "hi"
-        define flow
-          user express greeting
-          bot express greeting
-        """,
-    )
-
-    llm_completions = [
-        'bot express greeting\n  "Hello there! How can I help you?"',
-    ]
-
-    chat = TestChat(config, llm_completions=llm_completions, streaming=True)
-
-    chunks = await collect_streaming_chunks(
-        chat.app.stream_async(messages=[{"role": "user", "content": "Hi!"}])
-    )
-
-    internal_error_chunks = find_internal_error_chunks(chunks)
-    assert (
-        len(internal_error_chunks) == 1
-    ), f"Expected exactly one internal error chunk, got {len(internal_error_chunks)}"
-
-    error = internal_error_chunks[0]
-    assert error["error"]["type"] == "internal_error"
-    assert error["error"]["code"] == "rail_execution_failure"
-    assert "Internal error" in error["error"]["message"]
-    assert "content safety check output" in error["error"]["message"]
-    assert (
-        error["error"]["param"] == "content safety check output $model=content_safety"
-    )
 
 
 @pytest.mark.asyncio
@@ -163,24 +93,19 @@ async def test_streaming_action_execution_failure():
     chat = TestChat(config, llm_completions=llm_completions, streaming=True)
     chat.app.register_action(failing_rail_action)
 
-    chunks = await collect_streaming_chunks(
-        chat.app.stream_async(messages=[{"role": "user", "content": "Hi!"}])
-    )
+    chunks = await collect_streaming_chunks(chat.app.stream_async(messages=[{"role": "user", "content": "Hi!"}]))
 
     internal_error_chunks = find_internal_error_chunks(chunks)
-    assert (
-        len(internal_error_chunks) == 1
-    ), f"Expected exactly one internal error chunk, got {len(internal_error_chunks)}"
+    assert len(internal_error_chunks) == 1, (
+        f"Expected exactly one internal error chunk, got {len(internal_error_chunks)}"
+    )
 
     error = internal_error_chunks[0]
     assert error["error"]["type"] == "internal_error"
     assert error["error"]["code"] == "rail_execution_failure"
     assert "Internal error" in error["error"]["message"]
     assert "failing safety check" in error["error"]["message"]
-    assert (
-        "Action failing_rail_action failed with status: failed"
-        in error["error"]["message"]
-    )
+    assert "Action failing_rail_action failed with status: failed" in error["error"]["message"]
     assert error["error"]["param"] == "failing safety check"
 
 
@@ -225,9 +150,7 @@ async def test_streaming_internal_error_format():
     chat = TestChat(config, llm_completions=llm_completions, streaming=True)
     chat.app.register_action(test_failing_action)
 
-    chunks = await collect_streaming_chunks(
-        chat.app.stream_async(messages=[{"role": "user", "content": "Hi!"}])
-    )
+    chunks = await collect_streaming_chunks(chat.app.stream_async(messages=[{"role": "user", "content": "Hi!"}]))
 
     internal_error_chunks = find_internal_error_chunks(chunks)
     assert len(internal_error_chunks) == 1

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,9 +45,7 @@ def migrate(
         from_version(str): The version of the colang files to convert from. Any of '1.0' or '2.0-alpha'.
         validate (bool): Whether to validate the files.
     """
-    console.print(
-        f"Starting migration for path: {path} from version {from_version} to latest version."
-    )
+    console.print(f"Starting migration for path: {path} from version {from_version} to latest version.")
 
     co_files_to_process = _get_co_files_to_process(path)
     config_files_to_process = _get_config_files_to_process(path)
@@ -106,9 +104,7 @@ def convert_colang_2alpha_syntax(lines: List[str]) -> List[str]:
         # Replace specific phrases based on the file
         # if "core.co" in file_path:
         line = line.replace("catch Colang errors", "notification of colang errors")
-        line = line.replace(
-            "catch undefined flows", "notification of undefined flow start"
-        )
+        line = line.replace("catch undefined flows", "notification of undefined flow start")
         line = line.replace(
             "catch unexpected user utterance",
             "notification of unexpected user utterance",
@@ -126,25 +122,15 @@ def convert_colang_2alpha_syntax(lines: List[str]) -> List[str]:
             "trigger user intent for unhandled user utterance",
             "generating user intent for unhandled user utterance",
         )
-        line = line.replace(
-            "generate then continue interaction", "llm continue interaction"
-        )
-        line = line.replace(
-            "track unhandled user intent state", "tracking unhandled user intent state"
-        )
-        line = line.replace(
-            "respond to unhandled user intent", "continuation on unhandled user intent"
-        )
+        line = line.replace("generate then continue interaction", "llm continue interaction")
+        line = line.replace("track unhandled user intent state", "tracking unhandled user intent state")
+        line = line.replace("respond to unhandled user intent", "continuation on unhandled user intent")
 
         # we must import llm library
         _confirm_and_tag_replace(line, original_line, "llm")
 
-        line = line.replace(
-            "track visual choice selection state", "track visual choice selection state"
-        )
-        line = line.replace(
-            "interruption handling bot talking", "handling bot talking interruption"
-        )
+        line = line.replace("track visual choice selection state", "track visual choice selection state")
+        line = line.replace("interruption handling bot talking", "handling bot talking interruption")
         line = line.replace("manage listening posture", "managing listening posture")
         line = line.replace("manage talking posture", "managing talking posture")
         line = line.replace("manage thinking posture", "managing thinking posture")
@@ -173,13 +159,15 @@ def convert_colang_2alpha_syntax(lines: List[str]) -> List[str]:
             new_lines.append(line)
         elif line.strip().startswith("# meta"):
             if "loop_id" in line:
-                meta_decorator = re.sub(
-                    r"#\s*meta:\s*loop_id=(.*)", r'@loop("\1")', line.lstrip()
-                )
+                meta_decorator = re.sub(r"#\s*meta:\s*loop_id=(.*)", r'@loop("\1")', line.lstrip())
             else:
+
+                def replace_meta(m):
+                    return "@meta(" + m.group(1).replace(" ", "_") + "=True)"
+
                 meta_decorator = re.sub(
                     r"#\s*meta:\s*(.*)",
-                    lambda m: "@meta(" + m.group(1).replace(" ", "_") + "=True)",
+                    replace_meta,
                     line.lstrip(),
                 )
             meta_decorators.append(meta_decorator)
@@ -216,7 +204,8 @@ def convert_colang_1_syntax(lines: List[str]) -> List[str]:
 
         # Check if the line matches the pattern $variable = ...
         # use of ellipsis in Colang 1.0
-        # Based on https://github.com/NVIDIA/NeMo-Guardrails/blob/ff17a88efe70ed61580a36aaae5739f5aac6dccc/nemoguardrails/colang/v1_0/lang/coyml_parser.py#L610C1-L617C84
+        # Based on https://github.com/NVIDIA/NeMo-Guardrails/blob/ff17a88efe70ed61580a36aaae5739f5aac6dccc/
+        # nemoguardrails/colang/v1_0/lang/coyml_parser.py#L610C1-L617C84
 
         if i > 0 and re.match(r"\s*\$\s*.*\s*=\s*\.\.\.", line):
             # Extract the variable name
@@ -224,9 +213,10 @@ def convert_colang_1_syntax(lines: List[str]) -> List[str]:
             comment_match = re.search(r"# (.*)", lines[i - 1])
             if variable_match and comment_match:
                 variable = variable_match.group(1)
-                comment = comment_match.group(1)
+                comment = comment_match.group(1) or ""
                 # Extract the leading whitespace
-                leading_whitespace = re.match(r"(\s*)", line).group(1)
+                leading_whitespace_match = re.match(r"(\s*)", line)
+                leading_whitespace = leading_whitespace_match.group(1) if leading_whitespace_match else ""
                 # Replace the line, preserving the leading whitespace
                 line = f'{leading_whitespace}${variable} = ... "{comment}"'
 
@@ -256,7 +246,7 @@ def convert_colang_1_syntax(lines: List[str]) -> List[str]:
 
         if _is_anonymous_flow(line):
             # warnings.warn("Using anonymous flow is deprecated in Colang 2.0.")
-            line = _revise_anonymous_flow(line, next_line) + "\n"
+            line = _revise_anonymous_flow(line, next_line or "") + "\n"
 
         # We convert "define bot" to "flow bot" and set the flag
         if "define bot" in line:
@@ -330,9 +320,7 @@ def convert_colang_1_syntax(lines: List[str]) -> List[str]:
     return new_lines
 
 
-def _write_transformed_content_and_rename_original(
-    file_path, new_lines, co_extension=".v1.co"
-):
+def _write_transformed_content_and_rename_original(file_path, new_lines, co_extension=".v1.co"):
     """Writes the transformed content to the file."""
 
     # set the name of the v1 file
@@ -456,9 +444,7 @@ def _get_flow_ids(content: str) -> List:
 
     # Match any words (more than one) that comes after "flow " before new line and the first word after flow is not "user" or "bot"
 
-    root_flow_pattern = re.compile(
-        r"^flow\s+(?!user|bot)(.*?)$", re.IGNORECASE | re.MULTILINE
-    )
+    root_flow_pattern = re.compile(r"^flow\s+(?!user|bot)(.*?)$", re.IGNORECASE | re.MULTILINE)
     return root_flow_pattern.findall(content)
 
 
@@ -557,9 +543,7 @@ def _add_active_decorator(new_lines: List) -> List:
 
     _ACTIVE_DECORATOR = "@active"
     _NEWLINE = "\n"
-    root_flow_pattern = re.compile(
-        r"^flow\s+(?!bot)(.*?)$", re.IGNORECASE | re.MULTILINE
-    )
+    root_flow_pattern = re.compile(r"^flow\s+(?!bot)(.*?)$", re.IGNORECASE | re.MULTILINE)
 
     for line in new_lines:
         # if it is a root flow
@@ -572,7 +556,7 @@ def _add_active_decorator(new_lines: List) -> List:
 
 def _get_raw_config(config_path: str):
     """read the yaml file and get rails key"""
-
+    raw_config = None
     if config_path.endswith(".yaml") or config_path.endswith(".yml"):
         with open(config_path) as f:
             raw_config = yaml.safe_load(f.read())
@@ -820,9 +804,7 @@ def _process_co_files(
                 _add_main_co_file(main_file_path)
                 checked_directories.add(directory)
             _remove_files_from_path(directory, _FILES_TO_EXCLUDE_ALPHA)
-            if file_path not in _FILES_TO_EXCLUDE_ALPHA and _write_to_file(
-                file_path, new_lines
-            ):
+            if file_path not in _FILES_TO_EXCLUDE_ALPHA and _write_to_file(file_path, new_lines):
                 total_files_changed += 1
 
     return total_files_changed
@@ -842,9 +824,7 @@ def _validate_file(file_path, new_lines):
     """
 
     try:
-        parse_colang_file(
-            filename=file_path, content="\n".join(new_lines), version="2.x"
-        )
+        parse_colang_file(filename=file_path, content="\n".join(new_lines), version="2.x")
     except Exception as e:
         raise Exception(f"Validation failed for file: {file_path}. Error: {str(e)}")
 
@@ -1039,9 +1019,7 @@ def _process_sample_conversation_in_config(file_path: str):
         return  # No sample_conversation in file
 
     # get the base indentation
-    base_indent = len(lines[sample_conv_line_idx]) - len(
-        lines[sample_conv_line_idx].lstrip()
-    )
+    base_indent = len(lines[sample_conv_line_idx]) - len(lines[sample_conv_line_idx].lstrip())
     sample_conv_indent = None
 
     # get sample_conversation lines
@@ -1067,10 +1045,8 @@ def _process_sample_conversation_in_config(file_path: str):
 
     stripped_sample_lines = [line[sample_conv_indent:] for line in sample_lines]
     new_sample_lines = convert_sample_conversation_syntax(stripped_sample_lines)
-    # revert  the indentation
-    indented_new_sample_lines = [
-        " " * sample_conv_indent + line for line in new_sample_lines
-    ]
+    # revert the indentation
+    indented_new_sample_lines = [" " * (sample_conv_indent or 0) + line for line in new_sample_lines]
     lines[sample_conv_line_idx + 1 : sample_conv_end_idx] = indented_new_sample_lines
     # Write back the modified lines
     with open(file_path, "w") as f:

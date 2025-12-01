@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,8 +62,6 @@ class EmbeddingsIndex:
         This is optional, might not be needed for all implementations."""
         pass
 
-    async def search(
-        self, text: str, max_results: int, threshold: Optional[float]
-    ) -> List[IndexItem]:
+    async def search(self, text: str, max_results: int, threshold: Optional[float]) -> List[IndexItem]:
         """Searches the index for the closest matches to the provided text."""
         raise NotImplementedError()

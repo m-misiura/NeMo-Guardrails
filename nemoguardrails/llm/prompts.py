@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,9 +43,7 @@ def _load_prompts() -> List[TaskPrompt]:
         for root, dirs, files in os.walk(path):
             for filename in files:
                 if filename.endswith(".yml") or filename.endswith(".yaml"):
-                    with open(
-                        os.path.join(root, filename), encoding="utf-8"
-                    ) as prompts_file:
+                    with open(os.path.join(root, filename), encoding="utf-8") as prompts_file:
                         prompts.extend(yaml.safe_load(prompts_file.read())["prompts"])
 
     return [TaskPrompt(**prompt) for prompt in prompts]
@@ -54,9 +52,7 @@ def _load_prompts() -> List[TaskPrompt]:
 _prompts = _load_prompts()
 
 
-def _get_prompt(
-    task_name: str, model: str, prompting_mode: str, prompts: List
-) -> TaskPrompt:
+def _get_prompt(task_name: str, model: str, prompting_mode: str, prompts: List) -> TaskPrompt:
     """Return the prompt for the given task.
 
     We intentionally update the matching model at equal score, to take the last one,

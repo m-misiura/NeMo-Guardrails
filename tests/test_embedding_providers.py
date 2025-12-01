@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -79,9 +79,7 @@ class MockEmbeddingModel(EmbeddingModel):
         Returns:
             List[List[float]]: The encoded embeddings.
         """
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.encode, documents
-        )
+        return await asyncio.get_running_loop().run_in_executor(None, self.encode, documents)
 
     def encode(self, documents: List[str]) -> List[List[float]]:
         """Encode a list of documents into embeddings.

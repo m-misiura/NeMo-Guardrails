@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +14,11 @@
 # limitations under the License.
 from unittest.mock import MagicMock
 
-import pytest
-
-from nemoguardrails import LLMRails, RailsConfig
+from nemoguardrails import RailsConfig
 from nemoguardrails.kb.kb import KnowledgeBase
 from tests.utils import TestChat
 
-config = RailsConfig.from_content(
+RAILS_CONFIG = RailsConfig.from_content(
     """
 import llm
 import core
@@ -50,12 +48,10 @@ flow greeting
 def test_relevant_chunk_inserted_in_prompt():
     mock_kb = MagicMock(spec=KnowledgeBase)
 
-    mock_kb.search_relevant_chunks.return_value = [
-        {"title": "Test Title", "body": "Test Body"}
-    ]
+    mock_kb.search_relevant_chunks.return_value = [{"title": "Test Title", "body": "Test Body"}]
 
     chat = TestChat(
-        config,
+        RAILS_CONFIG,
         llm_completions=[
             " user express greeting",
             ' bot respond to aditional context\nbot action: "Hello is there anything else" ',
@@ -70,19 +66,21 @@ def test_relevant_chunk_inserted_in_prompt():
         {"role": "user", "content": "Hi!"},
     ]
 
-    new_message = rails.generate(messages=messages)
+    before_llm_calls = len(rails.explain().llm_calls)
+    _ = rails.generate(messages=messages)
+    after_llm_calls = len(rails.explain().llm_calls)
+    llm_call_count = after_llm_calls - before_llm_calls
 
     info = rails.explain()
-    assert len(info.llm_calls) == 2
-    assert "Test Body" in info.llm_calls[1].prompt
-
-    assert "markdown" in info.llm_calls[1].prompt
-    assert "context" in info.llm_calls[1].prompt
+    assert llm_call_count == 2
+    assert "Test Body" in info.llm_calls[-1].prompt
+    assert "markdown" in info.llm_calls[-1].prompt
+    assert "context" in info.llm_calls[-1].prompt
 
 
 def test_relevant_chunk_inserted_in_prompt_no_kb():
     chat = TestChat(
-        config,
+        RAILS_CONFIG,
         llm_completions=[
             " user express greeting",
             ' bot respond to aditional context\nbot action: "Hello is there anything else" ',
@@ -92,8 +90,13 @@ def test_relevant_chunk_inserted_in_prompt_no_kb():
     messages = [
         {"role": "user", "content": "Hi!"},
     ]
-    new_message = rails.generate(messages=messages)
+
+    before_llm_calls = len(rails.explain().llm_calls)
+    _ = rails.generate(messages=messages)
+    after_llm_calls = len(rails.explain().llm_calls)
+    llm_call_count = after_llm_calls - before_llm_calls
+
     info = rails.explain()
-    assert len(info.llm_calls) == 2
+    assert llm_call_count == 2
     assert "markdown" not in info.llm_calls[1].prompt
     assert "context" not in info.llm_calls[1].prompt

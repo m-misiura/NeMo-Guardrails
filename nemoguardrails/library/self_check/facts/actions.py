@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,13 +16,12 @@
 import logging
 from typing import Optional
 
-from langchain_core.language_models.llms import BaseLLM
+from langchain_core.language_models import BaseLLM
 
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions import action
 from nemoguardrails.actions.llm.utils import llm_call
 from nemoguardrails.context import llm_call_info_var
-from nemoguardrails.llm.params import llm_params
 from nemoguardrails.llm.taskmanager import LLMTaskManager
 from nemoguardrails.llm.types import Task
 from nemoguardrails.logging.explain import LLMCallInfo
@@ -72,17 +71,18 @@ async def self_check_facts(
     # Initialize the LLMCallInfo object
     llm_call_info_var.set(LLMCallInfo(task=task.value))
 
-    with llm_params(llm, temperature=config.lowest_temperature, max_tokens=max_tokens):
-        response = await llm_call(llm, prompt, stop=stop)
+    response = await llm_call(
+        llm,
+        prompt,
+        stop=stop,
+        llm_params={"temperature": config.lowest_temperature, "max_tokens": max_tokens},
+    )
 
     if llm_task_manager.has_output_parser(task):
         result = llm_task_manager.parse_task_output(task, output=response)
     else:
-        result = llm_task_manager.parse_task_output(
-            task, output=response, forced_output_parser="is_content_safe"
-        )
+        result = llm_task_manager.parse_task_output(task, output=response, forced_output_parser="is_content_safe")
 
-    result = result.text
     is_not_safe = result[0]
 
     result = float(not is_not_safe)

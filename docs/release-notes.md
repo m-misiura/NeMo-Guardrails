@@ -12,6 +12,61 @@ The following sections summarize and highlight the changes for each release.
 For a complete record of changes in a release, refer to the
 [CHANGELOG.md](https://github.com/NVIDIA/NeMo-Guardrails/blob/develop/CHANGELOG.md) in the GitHub repository.
 
+---
+
+(v0-18-0)=
+
+## 0.18.0
+
+(v0-18-0-features)=
+
+### Key Features
+
+- In-memory caching of guardrail model calls for reduced latency and cost savings.
+  NeMo Guardrails now supports per-model caching of guardrail responses using an LFU (Least Frequently Used) cache.
+  This feature is particularly effective for safety models such as NVIDIA NemoGuard [Content Safety](https://build.nvidia.com/nvidia/llama-3_1-nemoguard-8b-content-safety), [Topic Control](https://build.nvidia.com/nvidia/llama-3_1-nemoguard-8b-topic-control), and [Jailbreak Detection](https://build.nvidia.com/nvidia/nemoguard-jailbreak-detect) where identical inputs are common.
+  For more information, refer to [](model-memory-cache).
+- NeMo Guardrails extracts the reasoning traces from the LLM response and emits them as `BotThinking` events before the final `BotMessage` event.
+  For more information, refer to [](bot-thinking-guardrails).
+- New community integration with [Cisco AI Defense](https://www.cisco.com/site/ca/en/products/security/ai-defense/index.html).
+- New embedding integrations with Azure OpenAI, Google, and Cohere.
+
+(v0-18-0-fixed-issues)=
+
+### Fixed Issues
+
+- Implemented validation of content safety and topic control guardrail configurations at creation time, providing prompt error reporting if required prompt templates or parameters are missing.
+
+---
+
+(v0-17-0)=
+
+## 0.17.0
+
+(v0-17-0-features)=
+
+### Key Features
+
+- Added support for [integrating with LangGraph and tool calling](./user-guides/langchain/langgraph-integration.md).
+  This integration enables building safe and controlled multi-agent workflows.
+  LangGraph enables you to create sophisticated agent architectures with state management, conditional routing, and tool calling, while NeMo Guardrails provides the safety layer to ensure responsible AI behavior.
+  You can intercept, store, and forward LLM tool invocations with backward compatibility.
+
+- Enhanced support for [integrating with LangChain `RunnableRails`](./user-guides/langchain/runnable-rails.md).
+  This release supports the LangChain Runnable interface, such as synchronous and asynchronous operations, streaming, and batch processing while preserving metadata during LangChain operation.
+  This enhancement enables NeMo Guardrails to plug into LangChain pipelines seamlessly.
+
+- Trend Micro contributed support for Trend Micro Vision One AI Application Security AI Guard.
+  Refer to [configuration documentation](./user-guides/community/trend-micro.md) for more information.
+
+(v0-17-0-other-changes)=
+
+### Other Changes
+
+- Improved URL handling for connecting to NemoGuard JailbreakDetect NIM.
+  Guardrails now tolerates the URL for `rails.config.jailbreak_detection.nim_base_url` ending with or without a trailing slash.
+  Refer to [](./user-guides/advanced/nemoguard-jailbreakdetect-deployment.md) for information about using the NIM.
+
 (v0-16-0)=
 
 ## 0.16.0

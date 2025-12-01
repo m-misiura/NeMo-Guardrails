@@ -9,6 +9,144 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 >
 > The changes related to the Colang language and runtime have moved to [CHANGELOG-Colang](./CHANGELOG-Colang.md) file.
 
+## [0.18.0] - 2025-11-06
+
+### 🚀 Features
+
+- *(bot-thinking)* Implement BotThinking events to process reasoning traces in Guardrails ([#1431](https://github.com/NVIDIA/NeMo-Guardrails/issues/1431)), ([#1432](https://github.com/NVIDIA/NeMo-Guardrails/issues/1432)), ([#1434](https://github.com/NVIDIA/NeMo-Guardrails/issues/1434)).
+- *(embeddings)* Add Azure OpenAI embedding provider ([#702](https://github.com/NVIDIA/NeMo-Guardrails/issues/702)).
+- *(embeddings)* Add Cohere embedding integration ([#1305](https://github.com/NVIDIA/NeMo-Guardrails/issues/1305)).
+- *(embeddings)* Add Google embedding integration ([#1304](https://github.com/NVIDIA/NeMo-Guardrails/issues/1304)).
+- *(library)* Add Cisco AI Defense integration ([#1433](https://github.com/NVIDIA/NeMo-Guardrails/issues/1433)).
+- *(cache)* Add in-memory LFU caches for content-safety, topic-control, and jailbreak detection models ([#1436](https://github.com/NVIDIA/NeMo-Guardrails/issues/1436)), ([#1456](https://github.com/NVIDIA/NeMo-Guardrails/issues/1456)),  ([#1457](https://github.com/NVIDIA/NeMo-Guardrails/issues/1457)), ([#1458](https://github.com/NVIDIA/NeMo-Guardrails/issues/1458)).
+- *(llm)* Add automatic provider inference for LangChain LLMs ([#1460](https://github.com/NVIDIA/NeMo-Guardrails/issues/1460)).
+- *(llm)* Add custom HTTP headers support to ChatNVIDIA provider ([#1461](https://github.com/NVIDIA/NeMo-Guardrails/issues/1461)).
+
+### 🐛 Bug Fixes
+
+- *(config)* Validate content safety and topic control configs at creation time ([#1450](https://github.com/NVIDIA/NeMo-Guardrails/issues/1450)).
+- *(jailbreak)* Capitalization of `Snowflake` in use of `snowflake-arctic-embed-m-long` name. ([#1464](https://github.com/NVIDIA/NeMo-Guardrails/issues/1464)).
+- *(runtime)* Ensure stop flag is set for policy violations in parallel rails ([#1467](https://github.com/NVIDIA/NeMo-Guardrails/issues/1467)).
+- *(llm)* [**breaking**] Extract reasoning traces to separate field instead of prepending ([#1468](https://github.com/NVIDIA/NeMo-Guardrails/issues/1468)).
+- *(streaming)* [**breaking**] Raise error when stream_async used with disabled output rails streaming ([#1470](https://github.com/NVIDIA/NeMo-Guardrails/issues/1470)).
+- *(llm)* Add fallback extraction for reasoning traces from <think> tags ([#1474](https://github.com/NVIDIA/NeMo-Guardrails/issues/1474)).
+- *(runtime)* Set stop flag for exception-based rails in parallel mode ([#1487](https://github.com/NVIDIA/NeMo-Guardrails/issues/1487)).
+
+### 🚜 Refactor
+
+- [**breaking**] Replace reasoning trace extraction with LangChain additional_kwargs ([#1427](https://github.com/NVIDIA/NeMo-Guardrails/issues/1427))
+
+### 📚 Documentation
+
+- *(examples)* Add Nemoguard in-memory cache configuration example ([#1459](https://github.com/NVIDIA/NeMo-Guardrails/issues/1459)), ([#1480](https://github.com/NVIDIA/NeMo-Guardrails/issues/1480)).
+- Add guide for bot reasoning guardrails ([#1479](https://github.com/NVIDIA/NeMo-Guardrails/issues/1479)).
+- Update LLM reasoning traces configuration ([#1483](https://github.com/NVIDIA/NeMo-Guardrails/issues/1483)).
+
+### 🧪 Testing
+
+- Add mock embedding provider tests ([#1446](https://github.com/NVIDIA/NeMo-Guardrails/issues/1446))
+- *(cli)* Add comprehensive CLI test suite and reorganize files ([#1339](https://github.com/NVIDIA/NeMo-Guardrails/issues/1339))
+- Skip FastEmbed tests when not in live mode ([#1462](https://github.com/NVIDIA/NeMo-Guardrails/issues/1462))
+- Fix flaky stats logging interval timing test ([#1463](https://github.com/NVIDIA/NeMo-Guardrails/issues/1463))
+- Restore test that was skipped due to Colang 2.0 serialization issue ([#1449](https://github.com/NVIDIA/NeMo-Guardrails/issues/1449))
+
+### ⚙️ Miscellaneous Tasks
+
+- Resolve PyPI publish workflow trigger and reliability issues ([#1443](https://github.com/NVIDIA/NeMo-Guardrails/issues/1443))
+- Fix sparse checkout for publish pypi workflow ([#1444](https://github.com/NVIDIA/NeMo-Guardrails/issues/1444))
+- Drop Python 3.9 support ahead of October 2025 EOL ([#1426](https://github.com/NVIDIA/NeMo-Guardrails/issues/1426))
+- *(types)* Add type-annotations and pre-commit checks for tracing ([#1388](https://github.com/NVIDIA/NeMo-Guardrails/issues/1388)), logging ([#1395](https://github.com/NVIDIA/NeMo-Guardrails/issues/1395)), kb  ([#1385](https://github.com/NVIDIA/NeMo-Guardrails/issues/1385)), cli ([#1380](https://github.com/NVIDIA/NeMo-Guardrails/issues/1380)), embeddings ([#1383](https://github.com/NVIDIA/NeMo-Guardrails/issues/1383)), server ([#1397](https://github.com/NVIDIA/NeMo-Guardrails/issues/1397)), and llm ([#1394](https://github.com/NVIDIA/NeMo-Guardrails/issues/1394)) code.
+- Update insert licenser pe-commit-hooks to use current year ([#1452](https://github.com/NVIDIA/NeMo-Guardrails/issues/1452)).
+- *(library)* Remove unused vllm requirements.txt files ([#1466](https://github.com/NVIDIA/NeMo-Guardrails/issues/1466)).
+
+## [0.17.0] - 2025-10-09
+
+### 🚀 Features
+
+- *(tool-calling)* Add tool call passthrough support in LLMRails ([#1364](https://github.com/NVIDIA/NeMo-Guardrails/issues/1364))
+- *(runnable-rails)* Complete rewrite of RunnableRails with full LangChain Runnable protocol support ([#1366](https://github.com/NVIDIA/NeMo-Guardrails/issues/1366), [#1369](https://github.com/NVIDIA/NeMo-Guardrails/issues/1369), [#1370](https://github.com/NVIDIA/NeMo-Guardrails/issues/1370), [#1405](https://github.com/NVIDIA/NeMo-Guardrails/issues/1405))
+- *(tool-rails)* Add support for tool output rails and validation ([#1382](https://github.com/NVIDIA/NeMo-Guardrails/issues/1382))
+- *(tool-rails)* Implement tool input rails for tool message validation and processing ([#1386](https://github.com/NVIDIA/NeMo-Guardrails/issues/1386))
+- *(library)* Add Trend Micro Vision One AI Application Security community integration ([#1355](https://github.com/NVIDIA/NeMo-Guardrails/issues/1355))
+- *(llm)* Pass llm params directly ([#1387](https://github.com/NVIDIA/NeMo-Guardrails/issues/1387))
+
+### 🐛 Bug Fixes
+
+- *(jailbreak)* Handle URL joining with/without trailing slashes ([#1346](https://github.com/NVIDIA/NeMo-Guardrails/issues/1346))
+- *(logging)* Handle missing id and task in verbose logs ([#1343](https://github.com/NVIDIA/NeMo-Guardrails/issues/1343))
+- *(library)* Fix import package declaration to new cleanlab-tlm name ([#1401](https://github.com/NVIDIA/NeMo-Guardrails/issues/1401))
+- *(logging)* Add "Tool" type to message sender labeling ([#1412](https://github.com/NVIDIA/NeMo-Guardrails/issues/1412))
+- *(logging)* Correct message type formatting in logs ([#1416](https://github.com/NVIDIA/NeMo-Guardrails/issues/1416))
+
+### 🚜 Refactor
+
+- *(llm)* Remove LLMs isolation for actions ([#1408](https://github.com/NVIDIA/NeMo-Guardrails/issues/1408))
+
+### 📚 Documentation
+
+- *(examples)* Add NeMoGuard safety rails config example for Colang 1.0 ([#1365](https://github.com/NVIDIA/NeMo-Guardrails/issues/1365))
+- Add hardware reqs ([#1411](https://github.com/NVIDIA/NeMo-Guardrails/issues/1411))
+- Add tools integration guide ([#1414](https://github.com/NVIDIA/NeMo-Guardrails/issues/1414))
+- *(langgraph)* Add integration guide for LangGraph ([#1422](https://github.com/NVIDIA/NeMo-Guardrails/issues/1422))
+- *(langchain)* Update with full support and add tool calling guide … ([#1419](https://github.com/NVIDIA/NeMo-Guardrails/issues/1419))
+- *(langgraph)* Clarify tool examples and replace calculate_math with multiply ([#1439](https://github.com/NVIDIA/NeMo-Guardrails/issues/1439))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(docs)* Update v0.16.0 release date in changelog ([#1377](https://github.com/NVIDIA/NeMo-Guardrails/issues/1377))
+- *(docs)* Add link to demo.py script in Getting-Started section ([#1399](https://github.com/NVIDIA/NeMo-Guardrails/issues/1399))
+- *(types)* Type-clean rails (86 errors) ([#1396](https://github.com/NVIDIA/NeMo-Guardrails/issues/1396))
+- *(jailbreak-detection)* Update transformers and torch ([#1417](https://github.com/NVIDIA/NeMo-Guardrails/issues/1417))
+- *(types)* Type-clean /actions (189 errors) ([#1361](https://github.com/NVIDIA/NeMo-Guardrails/issues/1361))
+- *(docs)* Update repository owner ([#1425](https://github.com/NVIDIA/NeMo-Guardrails/issues/1425))
+
+## [0.16.0] - 2025-09-05
+
+### 🚀 Features
+
+- *(llmrails)* Support method chaining by returning self from LLMRails.register_* methods ([#1296](https://github.com/NVIDIA/NeMo-Guardrails/issues/1296))
+- Add Pangea AI Guard community integration ([#1300](https://github.com/NVIDIA/NeMo-Guardrails/issues/1300))
+- *(llmrails)* Isolate LLMs only for configured actions ([#1342](https://github.com/NVIDIA/NeMo-Guardrails/issues/1342))
+- Enhance tracing system with OpenTelemetry semantic conventions ([#1331](https://github.com/NVIDIA/NeMo-Guardrails/issues/1331))
+- Add GuardrailsAI community integration ([#1298](https://github.com/NVIDIA/NeMo-Guardrails/issues/1298))
+
+### 🐛 Bug Fixes
+
+- *(models)* Suppress langchain_nvidia_ai_endpoints warnings ([#1371](https://github.com/NVIDIA/NeMo-Guardrails/issues/1371))
+- *(tracing)* Respect the user-provided log options regardless of tracing configuration
+- *(config)* Ensure adding RailsConfig objects handles None values ([#1328](https://github.com/NVIDIA/NeMo-Guardrails/issues/1328))
+- *(config)* Add handling for config directory with `.yml`/`.yaml` extension ([#1293](https://github.com/NVIDIA/NeMo-Guardrails/issues/1293))
+- *(colang)* Apply guardrails transformations to LLM inputs and bot outputs. ([#1297](https://github.com/NVIDIA/NeMo-Guardrails/issues/1297))
+- *(topic_safety)* Handle InternalEvent objects in topic safety actions for Colang 2.0 ([#1335](https://github.com/NVIDIA/NeMo-Guardrails/issues/1335))
+- *(prompts)* Prevent IndexError when LLM provided via constructor with empty models config ([#1334](https://github.com/NVIDIA/NeMo-Guardrails/issues/1334))
+- *(llmrails)* Handle LLM models without model_kwargs field in isolation ([#1336](https://github.com/NVIDIA/NeMo-Guardrails/issues/1336))
+- *(llmrails)* Move LLM isolation setup to after KB initialization ([#1348](https://github.com/NVIDIA/NeMo-Guardrails/issues/1348))
+
+### 🚜 Refactor
+
+- *(llm)* Move get_action_details_from_flow_id from llmrails.py to utils.py ([#1341](https://github.com/NVIDIA/NeMo-Guardrails/issues/1341))
+
+### 📚 Documentation
+
+- Integrate with multilingual NIM ([#1354](https://github.com/NVIDIA/NeMo-Guardrails/issues/1354))
+- *(tracing)* Update tracing notebooks with VDR feedback ([#1376](https://github.com/NVIDIA/NeMo-Guardrails/issues/1376))
+- Add kv cache reuse documentation ([#1330](https://github.com/NVIDIA/NeMo-Guardrails/issues/1330))
+- *(examples)* Add Colang 2.0 example for sensitive data detection ([#1301](https://github.com/NVIDIA/NeMo-Guardrails/issues/1301))
+- Add extra slash to jailbreak detect nim_base_url([#1345](https://github.com/NVIDIA/NeMo-Guardrails/issues/1345))
+- Add tracing notebook ([#1337](https://github.com/NVIDIA/NeMo-Guardrails/issues/1337))
+- Jaeger tracing notebook ([#1353](https://github.com/NVIDIA/NeMo-Guardrails/issues/1353))
+- *(examples)* Add NeMoGuard rails config for colang 2 ([#1289](https://github.com/NVIDIA/NeMo-Guardrails/issues/1289))
+- *(tracing)* Add OpenTelemetry span format guide ([#1350](https://github.com/NVIDIA/NeMo-Guardrails/issues/1350))
+- Add GuardrailsAI integration user guide and example ([#1357](https://github.com/NVIDIA/NeMo-Guardrails/issues/1357))
+
+### 🧪 Testing
+
+- *(jailbreak)* Add missing pytest.mark.asyncio decorators ([#1352](https://github.com/NVIDIA/NeMo-Guardrails/issues/1352))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(docs)* Rename test_csl.py to csl.py ([#1347](https://github.com/NVIDIA/NeMo-Guardrails/issues/1347))
+
 ## [0.15.0] - 2025-08-08
 
 ### 🚀 Features

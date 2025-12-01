@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -87,7 +87,7 @@ def _fix_prefix_and_type_in_code_blocks(md_file_path):
                     updated_block = "\n".join(lines)
                     content = content.replace(block, updated_block)
                     block = updated_block
-            except:
+            except Exception:
                 pass
 
         if lines[0] == "```" and "from nemoguardrails" in block:
@@ -194,9 +194,7 @@ def rename_md_to_readme(start_dir):
 
         # We do some additional post-processing
         _remove_code_blocks_with_text(readme_path.absolute(), "# Init:")
-        _remove_code_blocks_with_text(
-            readme_path.absolute(), "# Hide from documentation page."
-        )
+        _remove_code_blocks_with_text(readme_path.absolute(), "# Hide from documentation page.")
 
         _remove_code_blocks_with_text(
             readme_path.absolute(),

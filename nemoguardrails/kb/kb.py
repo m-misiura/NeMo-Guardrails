@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -74,9 +74,7 @@ class KnowledgeBase:
         self,
         documents: List[str],
         config: KnowledgeBaseConfig,
-        get_embedding_search_provider_instance: Callable[
-            [Optional[EmbeddingSearchProvider]], EmbeddingsIndex
-        ],
+        get_embedding_search_provider_instance: Callable[[Optional[EmbeddingSearchProvider]], EmbeddingsIndex],
     ):
         self.documents = documents
         self.chunks = []
@@ -138,9 +136,7 @@ class KnowledgeBase:
             log.info(cache_file)
             self.index = cast(
                 BasicEmbeddingsIndex,
-                self._get_embeddings_search_instance(
-                    self.config.embedding_search_provider
-                ),
+                self._get_embeddings_search_instance(self.config.embedding_search_provider),
             )
 
             with open(embedding_size_file, "r") as f:
@@ -153,9 +149,7 @@ class KnowledgeBase:
 
             await self.index.add_items(index_items)
         else:
-            self.index = self._get_embeddings_search_instance(
-                self.config.embedding_search_provider
-            )
+            self.index = self._get_embeddings_search_instance(self.config.embedding_search_provider)
             await self.index.add_items(index_items)
             await self.index.build()
 
@@ -167,6 +161,8 @@ class KnowledgeBase:
                 # We also save the file for future use
                 os.makedirs(CACHE_FOLDER, exist_ok=True)
                 basic_index = cast(BasicEmbeddingsIndex, self.index)
+                if not basic_index.embeddings_index:
+                    raise Exception("Couldn't create basic embeddings index")
                 basic_index.embeddings_index.save(cache_file)
 
                 # And, explicitly save the size as we need it when we reload

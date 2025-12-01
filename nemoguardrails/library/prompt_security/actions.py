@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -103,9 +103,7 @@ def protect_text_mapping(result: dict) -> bool:
 
 
 @action(is_system_action=True, output_mapping=protect_text_mapping)
-async def protect_text(
-    user_prompt: Optional[str] = None, bot_response: Optional[str] = None, **kwargs
-):
+async def protect_text(user_prompt: Optional[str] = None, bot_response: Optional[str] = None, **kwargs):
     """Protects the given user_prompt or bot_response.
     Args:
         user_prompt: The user message to protect.
@@ -131,9 +129,7 @@ async def protect_text(
         raise ValueError("PS_APP_ID env variable is required for Prompt Security.")
 
     if bot_response:
-        return await ps_protect_api_async(
-            ps_protect_url, ps_app_id, None, None, bot_response
-        )
+        return await ps_protect_api_async(ps_protect_url, ps_app_id, None, None, bot_response)
 
     if user_prompt:
         return await ps_protect_api_async(ps_protect_url, ps_app_id, user_prompt)

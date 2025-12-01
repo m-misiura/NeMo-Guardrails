@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -118,9 +118,7 @@ def test_load_actions_from_module_relative_path_exception(monkeypatch):
         try:
             actions = dispatcher._load_actions_from_module(str(module_path))
         finally:
-            monkeypatch.setattr(
-                "nemoguardrails.actions.action_dispatcher.Path.cwd", original_cwd
-            )
+            monkeypatch.setattr("nemoguardrails.actions.action_dispatcher.Path.cwd", original_cwd)
 
         assert actions == {}
         mock_logger.error.assert_called()
@@ -131,3 +129,50 @@ def test_load_actions_from_module_relative_path_exception(monkeypatch):
         assert "invalid syntax" in error_message
 
         assert "exception:" in error_message
+
+
+@pytest.mark.asyncio
+async def test_execute_missing_action_raises():
+    """Create an action with name but no function to call, check it raises an exception"""
+
+    missing_action_name = "missing_test_action"
+    dispatcher = ActionDispatcher(load_all_actions=False)
+    dispatcher.register_action(None, name=missing_action_name)
+
+    with pytest.raises(Exception, match="is not registered."):
+        _ = await dispatcher.execute_action(missing_action_name, params={})
+
+
+@pytest.mark.asyncio
+async def test_execute_action_not_callable_raises(caplog):
+    """Register a function with a "run" attribute that isn't callable"""
+
+    action_name = "uncallable_test_action"
+    dispatcher = ActionDispatcher(load_all_actions=False)
+    dispatcher.register_action({"run": "not callable"}, name=action_name)
+
+    # No Exception is raised, it gets caught and logged out as an error instead
+    result = await dispatcher.execute_action(action_name, params={})
+    assert result == (None, "failed")
+    last_log = caplog.records[-1]
+    assert last_log.levelname == "ERROR"
+    assert last_log.message == f"No 'run' method defined for action '{action_name}'."
+
+
+@pytest.mark.asyncio
+async def test_execute_action_with_signature():
+    """Register a function with a "run" attribute that **is** callable"""
+
+    action_name = "callable_test_action"
+    action_return = "The callable test action was just called!"
+
+    class test_class:
+        def run(self):
+            return action_return
+
+    dispatcher = ActionDispatcher(load_all_actions=False)
+    dispatcher.register_action(test_class, name=action_name)
+
+    # No Exception is raised, it gets caught and logged out as an error instead
+    result = await dispatcher.execute_action(action_name, params={})
+    assert result == (action_return, "success")

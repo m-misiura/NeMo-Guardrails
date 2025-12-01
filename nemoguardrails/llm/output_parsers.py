@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -161,10 +161,7 @@ def nemoguard_parse_prompt_safety(response: str) -> Sequence[Union[bool, str]]:
         assert "User Safety" in parsed_json_result
         result = parsed_json_result["User Safety"].lower()
         if "Safety Categories" in parsed_json_result:
-            safety_categories = [
-                cat.strip()
-                for cat in parsed_json_result["Safety Categories"].split(",")
-            ]
+            safety_categories = [cat.strip() for cat in parsed_json_result["Safety Categories"].split(",")]
         else:
             safety_categories = []
     except Exception:
@@ -203,10 +200,7 @@ def nemoguard_parse_response_safety(response: str) -> Sequence[Union[bool, str]]
         assert "Response Safety" in parsed_json_result
         result = parsed_json_result["Response Safety"].lower()
         if "Safety Categories" in parsed_json_result:
-            safety_categories = [
-                cat.strip()
-                for cat in parsed_json_result["Safety Categories"].split(",")
-            ]
+            safety_categories = [cat.strip() for cat in parsed_json_result["Safety Categories"].split(",")]
         else:
             safety_categories = []
     except Exception:

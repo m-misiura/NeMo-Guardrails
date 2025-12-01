@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,11 +22,9 @@ def contains_secrets(resp):
     ArtifactoryDetector    : False
     """
     try:
-        import detect_secrets
+        import detect_secrets  # type: ignore (Assume user installs detect_secrets with instructions below)
     except ModuleNotFoundError:
-        raise ValueError(
-            "Could not import detect_secrets. Please install using `pip install detect-secrets`"
-        )
+        raise ValueError("Could not import detect_secrets. Please install using `pip install detect-secrets`")
 
     with detect_secrets.settings.default_settings():
         res = detect_secrets.scan_adhoc_string(resp)

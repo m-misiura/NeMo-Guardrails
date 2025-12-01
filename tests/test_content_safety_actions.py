@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 # conftest.py
 import pytest
@@ -88,9 +88,7 @@ async def test_content_safety_parsing(
     expected_violations,
 ):
     llms = fake_llm("irrelevant")
-    mock_parsed = MagicMock()
-    mock_parsed.text = parsed_text
-    mock_task_manager.parse_task_output.return_value = mock_parsed
+    mock_task_manager.parse_task_output.return_value = parsed_text
 
     result = await check_fn(
         llms=llms,
@@ -109,9 +107,7 @@ async def test_content_safety_check_input_missing_model_name():
     mock_task_manager = MagicMock()
 
     with pytest.raises(ValueError, match="Model name is required"):
-        await content_safety_check_input(
-            llms=llms, llm_task_manager=mock_task_manager, model_name=None, context={}
-        )
+        await content_safety_check_input(llms=llms, llm_task_manager=mock_task_manager, model_name=None, context={})
 
 
 @pytest.mark.asyncio

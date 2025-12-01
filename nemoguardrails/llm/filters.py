@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,23 +15,12 @@
 
 import re
 import textwrap
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List
 
 from nemoguardrails.actions.llm.utils import (
     get_colang_history,
     remove_action_intent_identifiers,
 )
-
-
-@dataclass
-class ReasoningExtractionResult:
-    """
-    Holds cleaned response text and optional chain-of-thought reasoning trace extracted from LLM output.
-    """
-
-    text: str
-    reasoning_trace: Optional[str] = None
 
 
 def colang(events: List[dict]) -> str:
@@ -60,7 +49,6 @@ def co_v2(
         "retrieve_relevant_chunks",
         "create_event",
         "wolfram alpha request",
-        "summarize_document",
         "apify",
         "bing_search",
         "google_search",
@@ -150,7 +138,7 @@ def to_messages(colang_history: str) -> List[dict]:
     # a message from the user, and the rest gets translated to messages from the assistant.
     lines = colang_history.split("\n")
 
-    bot_lines = []
+    bot_lines: list[str] = []
     for i, line in enumerate(lines):
         if line.startswith('user "'):
             # If we have bot lines in the buffer, we first add a bot message.
@@ -191,8 +179,8 @@ def to_messages_v2(colang_history: str) -> List[dict]:
     # a message from the user, and the rest gets translated to messages from the assistant.
     lines = colang_history.split("\n")
 
-    user_lines = []
-    bot_lines = []
+    user_lines: list[str] = []
+    bot_lines: list[str] = []
     for line in lines:
         if line.startswith("user action:"):
             if len(bot_lines) > 0:
@@ -269,11 +257,7 @@ def verbose_v1(colang_history: str) -> str:
     for i, line in enumerate(lines):
         if line.startswith('user "'):
             lines[i] = 'User message: "' + line[6:]
-        elif (
-            line.startswith("  ")
-            and i > 0
-            and lines[i - 1].startswith("User message: ")
-        ):
+        elif line.startswith("  ") and i > 0 and lines[i - 1].startswith("User message: "):
             lines[i] = "User intent: " + line.strip()
         elif line.startswith("user "):
             lines[i] = "User intent: " + line[5:].strip()
@@ -285,7 +269,7 @@ def verbose_v1(colang_history: str) -> str:
     return "\n".join(lines)
 
 
-def to_chat_messages(events: List[dict]) -> str:
+def to_chat_messages(events: List[dict]) -> List[dict]:
     """Filter that turns an array of events into a sequence of user/assistant messages.
 
     Properly handles multimodal content by preserving the structure when the content
@@ -448,100 +432,3 @@ def conversation_to_events(conversation: List) -> List[dict]:
             )
 
     return events
-
-
-def _find_token_positions_for_removal(
-    response: str, start_token: Optional[str], end_token: Optional[str]
-) -> Tuple[int, int]:
-    """Helper function to find token positions specifically for text removal.
-
-    This is useful, for example, to remove reasoning traces from a reasoning LLM response.
-
-    This is optimized for the removal use case:
-    1. Uses find() for first start token
-    2. Uses rfind() for last end token
-    3. Sets start_index to 0 if start token is missing
-
-    Args:
-        response(str): The text to search in
-        start_token(str): The token marking the start of text to remove
-        end_token(str): The token marking the end of text to remove
-
-    Returns:
-        A tuple of (start_index, end_index) marking the span to remove;
-            both indices are -1 if start_token and end_token are not provided.
-    """
-    if not start_token or not end_token:
-        return -1, -1
-
-    start_index = response.find(start_token)
-    # if the start index is missing, this is probably a continuation of a bot message
-    # started in the prompt.
-    if start_index == -1:
-        start_index = 0
-
-    end_index = response.rfind(end_token)
-
-    return start_index, end_index
-
-
-def find_reasoning_tokens_position(
-    response: str, start_token: Optional[str], end_token: Optional[str]
-) -> Tuple[int, int]:
-    """Finds the positions of the first start token and the last end token.
-
-    This is intended to find the outermost boundaries of potential
-    reasoning sections, typically for removal.
-
-    Args:
-        response(str): The text to search in.
-        start_token(Optional[str]): The token marking the start of reasoning.
-        end_token(Optional[str]): The token marking the end of reasoning.
-
-    Returns:
-        A tuple (start_index, end_index).
-        - start_index: Position of the first `start_token`, or 0 if not found.
-        - end_index: Position of the last `end_token`, or -1 if not found.
-    """
-
-    return _find_token_positions_for_removal(response, start_token, end_token)
-
-
-def extract_and_strip_trace(
-    response: str, start_token: str, end_token: str
-) -> ReasoningExtractionResult:
-    """Extracts and removes reasoning traces from the given text.
-
-    This function identifies reasoning traces in the text that are marked
-    by specific start and end tokens. It extracts these traces, removes
-    them from the original text, and returns both the cleaned text and
-    the extracted reasoning trace.
-
-    Args:
-        response (str): The text to process.
-        start_token (str): The token marking the start of a reasoning trace.
-        end_token (str): The token marking the end of a reasoning trace.
-
-    Returns:
-        ReasoningExtractionResult: An object containing the cleaned text
-        without reasoning traces and the extracted reasoning trace, if any.
-    """
-
-    start_index, end_index = find_reasoning_tokens_position(
-        response, start_token, end_token
-    )
-    # handles invalid/empty tokens returned as (-1, -1)
-    if start_index == -1 and end_index == -1:
-        return ReasoningExtractionResult(text=response, reasoning_trace=None)
-    # end token is missing
-    if end_index == -1:
-        return ReasoningExtractionResult(text=response, reasoning_trace=None)
-    # extrace if tokens are present and start < end
-    if start_index < end_index:
-        reasoning_trace = response[start_index : end_index + len(end_token)]
-        cleaned_text = response[:start_index] + response[end_index + len(end_token) :]
-        return ReasoningExtractionResult(
-            text=cleaned_text, reasoning_trace=reasoning_trace
-        )
-
-    return ReasoningExtractionResult(text=response, reasoning_trace=None)

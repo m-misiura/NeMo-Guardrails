@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +14,8 @@
 # limitations under the License.
 
 
-import pytest
-
 from nemoguardrails.tracing import SpanEvent, SpanLegacy
-from nemoguardrails.tracing.spans import LLMSpan, is_opentelemetry_span
+from nemoguardrails.tracing.spans import LLMSpan
 
 
 class TestSpanModels:
@@ -46,9 +44,7 @@ class TestSpanModels:
 
     def test_span_opentelemetry_creation(self):
         """Test creating an OpenTelemetry format span - typed spans with explicit fields."""
-        event = SpanEvent(
-            name="gen_ai.content.prompt", timestamp=0.5, body={"content": "test prompt"}
-        )
+        event = SpanEvent(name="gen_ai.content.prompt", timestamp=0.5, body={"content": "test prompt"})
 
         # OpenTelemetry spans are typed with explicit fields
         span = LLMSpan(

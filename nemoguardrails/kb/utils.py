@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +18,7 @@ from typing import List
 import yaml
 
 
-def split_markdown_in_topic_chunks(
-    content: str, max_chunk_size: int = 400
-) -> List[dict]:
+def split_markdown_in_topic_chunks(content: str, max_chunk_size: int = 400) -> List[dict]:
     """
     Splits a markdown content into topic chunks.
 

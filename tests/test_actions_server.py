@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,9 +21,7 @@ from nemoguardrails.actions_server import actions_server
 client = TestClient(actions_server.app)
 
 
-@pytest.mark.skip(
-    reason="Should only be run locally as it fetches data from wikipedia."
-)
+@pytest.mark.skip(reason="Should only be run locally as it fetches data from wikipedia.")
 @pytest.mark.parametrize(
     "action_name, action_parameters, result_field, status",
     [

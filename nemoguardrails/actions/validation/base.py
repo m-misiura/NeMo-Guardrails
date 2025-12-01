@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +14,7 @@
 # limitations under the License.
 import json
 import re
-from typing import List
+from typing import List, Sequence
 from urllib.parse import quote
 
 from nemoguardrails.actions.validation.filter_secrets import contains_secrets
@@ -22,7 +22,7 @@ from nemoguardrails.actions.validation.filter_secrets import contains_secrets
 MAX_LEN = 50
 
 
-def validate_input(attribute: str, validators: List[str] = (), **validation_args):
+def validate_input(attribute: str, validators: Sequence[str] = (), **validation_args):
     """A generic decorator that can be used by any action (class method or function) for input validation.
 
     Supported validation choices are: length and quote.
@@ -42,11 +42,7 @@ def validate_input(attribute: str, validators: List[str] = (), **validation_args
                 raise ValueError(f"Attribute {attribute} is empty.")
 
             if "length" in validators:
-                max_len = (
-                    validation_args["max_len"]
-                    if "max_len" in validation_args
-                    else MAX_LEN
-                )
+                max_len = validation_args["max_len"] if "max_len" in validation_args else MAX_LEN
                 if len(attribute_value) > max_len:
                     raise ValueError(f"Attribute {attribute} is too long.")
 

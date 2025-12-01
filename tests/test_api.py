@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,9 +26,7 @@ client = TestClient(api.app)
 
 @pytest.fixture(scope="function", autouse=True)
 def set_rails_config_path():
-    api.app.rails_config_path = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "test_configs")
-    )
+    api.app.rails_config_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "test_configs"))
     yield
     api.app.rails_config_path = os.path.normpath(
         os.path.join(os.path.dirname(__file__), "..", "..", "examples", "bots")
@@ -107,9 +105,7 @@ def test_request_body_validation():
         "config_ids": ["test_config1", "test_config2"],
         "messages": [{"role": "user", "content": "Hello"}],
     }
-    with pytest.raises(
-        ValueError, match="Only one of config_id or config_ids should be specified"
-    ):
+    with pytest.raises(ValueError, match="Only one of config_id or config_ids should be specified"):
         RequestBody.model_validate(data)
 
     data = {"messages": [{"role": "user", "content": "Hello"}]}

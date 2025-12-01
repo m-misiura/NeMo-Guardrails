@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
 
 from nemoguardrails.llm.providers.providers import _llm_providers
 
@@ -21,6 +20,4 @@ from nemoguardrails.llm.providers.providers import _llm_providers
 def test_acall_method_added():
     for provider_name, provider_cls in _llm_providers.items():
         assert hasattr(provider_cls, "_acall"), f"_acall not added to {provider_name}"
-        assert callable(
-            getattr(provider_cls, "_acall")
-        ), f"_acall is not callable in {provider_name}"
+        assert callable(getattr(provider_cls, "_acall")), f"_acall is not callable in {provider_name}"

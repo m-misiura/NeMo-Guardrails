@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Optional, Type
 
-from . import fastembed, nim, openai, sentence_transformers
+from . import azureopenai, cohere, fastembed, google, nim, openai, sentence_transformers
 from .base import EmbeddingModel
 from .registry import EmbeddingProviderRegistry
 
@@ -29,9 +29,7 @@ from .registry import EmbeddingProviderRegistry
 embeddings_executor = None
 
 
-def register_embedding_provider(
-    model: Type[EmbeddingModel], engine_name: Optional[str] = None
-):
+def register_embedding_provider(model: Type[EmbeddingModel], engine_name: Optional[str] = None):
     """Register an embedding provider.
 
     Args:
@@ -48,9 +46,7 @@ def register_embedding_provider(
         engine_name = model.engine_name
 
     if not engine_name:
-        raise ValueError(
-            "The engine name must be provided either in the model or as an argument."
-        )
+        raise ValueError("The engine name must be provided either in the model or as an argument.")
 
     registry = EmbeddingProviderRegistry()
     registry.add(engine_name, model)
@@ -65,14 +61,15 @@ _embedding_model_cache = {}
 
 register_embedding_provider(fastembed.FastEmbedEmbeddingModel)
 register_embedding_provider(openai.OpenAIEmbeddingModel)
+register_embedding_provider(azureopenai.AzureEmbeddingModel)
 register_embedding_provider(sentence_transformers.SentenceTransformerEmbeddingModel)
 register_embedding_provider(nim.NIMEmbeddingModel)
 register_embedding_provider(nim.NVIDIAAIEndpointsEmbeddingModel)
+register_embedding_provider(google.GoogleEmbeddingModel)
+register_embedding_provider(cohere.CohereEmbeddingModel)
 
 
-def init_embedding_model(
-    embedding_model: str, embedding_engine: str, embedding_params: dict = {}
-) -> EmbeddingModel:
+def init_embedding_model(embedding_model: str, embedding_engine: str, embedding_params: dict = {}) -> EmbeddingModel:
     """Initialize the embedding model.
 
     Args:
@@ -87,10 +84,7 @@ def init_embedding_model(
         ValueError: If the embedding engine is invalid.
     """
 
-    embedding_params_str = (
-        "_".join([f"{key}={value}" for key, value in embedding_params.items()])
-        or "default"
-    )
+    embedding_params_str = "_".join([f"{key}={value}" for key, value in embedding_params.items()]) or "default"
 
     model_key = f"{embedding_engine}-{embedding_model}-{embedding_params_str}"
 

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -234,9 +234,7 @@ class TestNemoguardParseResponseSafety:
 
     def test_categories_with_whitespace_trimming(self):
         """Test parsing categories with extra whitespace gets trimmed."""
-        response = (
-            '{"Response Safety": "unsafe", "Safety Categories": " S1 , S8 , S10 "}'
-        )
+        response = '{"Response Safety": "unsafe", "Safety Categories": " S1 , S8 , S10 "}'
         is_safe, *violated_policies = nemoguard_parse_response_safety(response)
         assert is_safe is False
         assert "S1" in violated_policies

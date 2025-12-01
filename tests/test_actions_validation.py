@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -70,6 +70,4 @@ def test_cls_validation():
         s_name.run(name="No good Wikipedia Search Result was found")
 
     # length is smaller than max len validation
-    assert (
-        s_name.run(name="IP 10.40.139.92 should be trimmed") == "IP  should be trimmed"
-    )
+    assert s_name.run(name="IP 10.40.139.92 should be trimmed") == "IP  should be trimmed"

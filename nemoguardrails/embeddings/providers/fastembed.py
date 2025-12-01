@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +42,7 @@ class FastEmbedEmbeddingModel(EmbeddingModel):
     engine_name = "FastEmbed"
 
     def __init__(self, embedding_model: str, **kwargs):
-        from fastembed import TextEmbedding as Embedding
+        from fastembed import TextEmbedding as Embedding  # type: ignore
 
         # Enabling a short form model name for all-MiniLM-L6-v2.
         if embedding_model == "all-MiniLM-L6-v2":

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,16 +24,14 @@ import pytest
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions import action
 from nemoguardrails.actions.actions import ActionResult
+from nemoguardrails.imports import check_optional_dependency
 from tests.utils import TestChat
 
-try:
-    import presidio_analyzer
-    import presidio_anonymizer
-    import spacy
-
-    SDD_SETUP_PRESENT = True
-except ImportError:
-    SDD_SETUP_PRESENT = False
+SDD_SETUP_PRESENT = (
+    check_optional_dependency("presidio_analyzer")
+    and check_optional_dependency("presidio_anonymizer")
+    and check_optional_dependency("spacy")
+)
 
 
 def setup_module(module):
@@ -67,9 +65,7 @@ def teardown_module(module):
     pass
 
 
-@pytest.mark.skipif(
-    not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present."
-)
+@pytest.mark.skipif(not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present.")
 @pytest.mark.unit
 def test_masking_input_output():
     config = RailsConfig.from_content(
@@ -122,9 +118,7 @@ def test_masking_input_output():
     chat << "Hello there! My name is <PERSON>!"
 
 
-@pytest.mark.skipif(
-    not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present."
-)
+@pytest.mark.skipif(not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present.")
 @pytest.mark.unit
 def test_detection_input_output():
     config = RailsConfig.from_content(
@@ -173,9 +167,7 @@ def test_detection_input_output():
     chat << "I can't answer that."
 
 
-@pytest.mark.skipif(
-    not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present."
-)
+@pytest.mark.skipif(not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present.")
 @pytest.mark.unit
 def test_masking_retrieval():
     config = RailsConfig.from_content(
@@ -232,9 +224,7 @@ def test_masking_retrieval():
     chat << "Hello there!"
 
 
-@pytest.mark.skipif(
-    not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present."
-)
+@pytest.mark.skipif(not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present.")
 @pytest.mark.unit
 def test_score_threshold():
     config = RailsConfig.from_content(
@@ -287,9 +277,7 @@ def test_score_threshold():
     chat << "I can't answer that."
 
 
-@pytest.mark.skipif(
-    not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present."
-)
+@pytest.mark.skipif(not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present.")
 @pytest.mark.unit
 def test_invalid_score_threshold(caplog):
     config = RailsConfig.from_content(
@@ -344,9 +332,7 @@ def test_invalid_score_threshold(caplog):
     assert "score_threshold must be a float between 0 and 1 (inclusive)." in caplog.text
 
 
-@pytest.mark.skipif(
-    not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present."
-)
+@pytest.mark.skipif(not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present.")
 @pytest.mark.unit
 def test_invalid_score_threshold_chat_message():
     config = RailsConfig.from_content(
@@ -395,9 +381,7 @@ def test_invalid_score_threshold_chat_message():
     chat << "I'm sorry, an internal error has occurred."
 
 
-@pytest.mark.skipif(
-    not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present."
-)
+@pytest.mark.skipif(not SDD_SETUP_PRESENT, reason="Sensitive Data Detection setup is not present.")
 @pytest.mark.unit
 def test_high_score_threshold_disables_rails():
     config = RailsConfig.from_content(

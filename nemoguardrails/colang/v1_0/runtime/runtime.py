@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin
 
 import aiohttp
-from langchain.chains.base import Chain
 
 from nemoguardrails.actions.actions import ActionResult
 from nemoguardrails.actions.core import create_event
@@ -102,15 +101,10 @@ class RuntimeV1_0(Runtime):
         # to the default ones.
         for element in elements:
             if element.get("UtteranceUserActionFinished"):
-                self.flow_configs[flow_id].trigger_event_types.append(
-                    "UtteranceUserActionFinished"
-                )
+                self.flow_configs[flow_id].trigger_event_types.append("UtteranceUserActionFinished")
 
             # If a flow creates a type of event, we also allow it to trigger the event.
-            if (
-                element["_type"] == "run_action"
-                and element["action_name"] == "create_event"
-            ):
+            if element["_type"] == "run_action" and element["action_name"] == "create_event":
                 event_type = element["action_params"]["event"]["_type"]
                 self.flow_configs[flow_id].trigger_event_types.append(event_type)
 
@@ -126,9 +120,7 @@ class RuntimeV1_0(Runtime):
         for flow in self.config.flows:
             self._load_flow_config(flow)
 
-    async def generate_events(
-        self, events: List[dict], processing_log: Optional[List[dict]] = None
-    ) -> List[dict]:
+    async def generate_events(self, events: List[dict], processing_log: Optional[List[dict]] = None) -> List[dict]:
         """Generates the next events based on the provided history.
 
         This is a wrapper around the `process_events` method, that will keep
@@ -150,21 +142,12 @@ class RuntimeV1_0(Runtime):
         # This is needed to automatically record the LLM calls.
         processing_log_var.set(processing_log)
 
-        processing_log.append(
-            {"type": "event", "timestamp": time(), "data": events[-1]}
-        )
+        processing_log.append({"type": "event", "timestamp": time(), "data": events[-1]})
 
         while True:
             last_event = events[-1]
 
             log.info("Processing event: %s", last_event)
-
-            event_type = last_event["type"]
-            log.info(
-                "Event :: %s %s",
-                event_type,
-                str({k: v for k, v in last_event.items() if k != "type"}),
-            )
 
             # If we need to execute an action, we start doing that.
             if last_event["type"] == "StartInternalSystemAction":
@@ -172,29 +155,30 @@ class RuntimeV1_0(Runtime):
 
             # If we need to start a flow, we parse the content and register it.
             elif last_event["type"] == "start_flow" and last_event.get("flow_body"):
-                next_events = await self._process_start_flow(
-                    events, processing_log=processing_log
-                )
+                next_events = await self._process_start_flow(events, processing_log=processing_log)
 
             else:
                 # We need to slide all the flows based on the current event,
                 # to compute the next steps.
-                next_events = await self._compute_next_steps(
-                    events, processing_log=processing_log
-                )
+                next_events = await self._compute_next_steps(events, processing_log=processing_log)
 
                 if len(next_events) == 0:
                     next_events = [new_event_dict("Listen")]
 
-            # Otherwise, we append the event and continue the processing.
-            events.extend(next_events)
-            new_events.extend(next_events)
-
+            # Log all generated events and add them to processing log
             for event in next_events:
                 if event["type"] != "EventHistoryUpdate":
-                    processing_log.append(
-                        {"type": "event", "timestamp": time(), "data": event}
+                    event_type = event["type"]
+                    log.info(
+                        "Event :: %s %s",
+                        event_type,
+                        str({k: v for k, v in event.items() if k != "type"}),
                     )
+                    processing_log.append({"type": "event", "timestamp": time(), "data": event})
+
+            # Append events to the event stream and new_events list
+            events.extend(next_events)
+            new_events.extend(next_events)
 
             # If the next event is a listen, we stop the processing.
             if next_events[-1]["type"] == "Listen":
@@ -208,18 +192,14 @@ class RuntimeV1_0(Runtime):
         temp_events = []
         for event in new_events:
             if event["type"] == "EventHistoryUpdate":
-                temp_events.extend(
-                    [e for e in event["data"]["events"] if e["type"] != "Listen"]
-                )
+                temp_events.extend([e for e in event["data"]["events"] if e["type"] != "Listen"])
             else:
                 temp_events.append(event)
         new_events = temp_events
 
         return new_events
 
-    async def _compute_next_steps(
-        self, events: List[dict], processing_log: List[dict]
-    ) -> List[dict]:
+    async def _compute_next_steps(self, events: List[dict], processing_log: List[dict]) -> List[dict]:
         """
         Compute the next steps based on the current flow.
 
@@ -311,11 +291,15 @@ class RuntimeV1_0(Runtime):
         # Wrapper function to help reverse map the task result to the flow ID
         async def task_call_helper(flow_uid, post_event, func, *args, **kwargs):
             result = await func(*args, **kwargs)
-            if post_event:
+
+            has_stop = any(
+                (event["type"] == "BotIntent" and event["intent"] == "stop") or event["type"].endswith("Exception")
+                for event in result
+            )
+
+            if post_event and not has_stop:
                 result.append(post_event)
-                args[1].append(
-                    {"type": "event", "timestamp": time(), "data": post_event}
-                )
+                args[1].append({"type": "event", "timestamp": time(), "data": post_event})
             return flow_uid, result
 
         # Create a task for each flow but don't await them yet
@@ -328,9 +312,7 @@ class RuntimeV1_0(Runtime):
             flow_id = _normalize_flow_id(flow_name)
 
             if flow_params:
-                _events.append(
-                    {"type": "start_flow", "flow_id": flow_id, "params": flow_params}
-                )
+                _events.append({"type": "start_flow", "flow_id": flow_id, "params": flow_params})
             else:
                 _events.append({"type": "start_flow", "flow_id": flow_id})
 
@@ -344,9 +326,7 @@ class RuntimeV1_0(Runtime):
             # Add pre-event if provided
             if pre_events:
                 task_results[flow_uid].append(pre_events[index])
-                task_processing_logs[flow_uid].append(
-                    {"type": "event", "timestamp": time(), "data": pre_events[index]}
-                )
+                task_processing_logs[flow_uid].append({"type": "event", "timestamp": time(), "data": pre_events[index]})
 
             task = asyncio.create_task(
                 task_call_helper(
@@ -361,6 +341,7 @@ class RuntimeV1_0(Runtime):
             unique_flow_ids[flow_uid] = task
 
         stopped_task_results: List[dict] = []
+        stopped_task_processing_logs: List[dict] = []
 
         # Process tasks as they complete using as_completed
         try:
@@ -370,21 +351,20 @@ class RuntimeV1_0(Runtime):
 
                     # Check if this rail requested to stop
                     has_stop = any(
-                        event["type"] == "BotIntent" and event["intent"] == "stop"
+                        (event["type"] == "BotIntent" and event["intent"] == "stop")
+                        or event["type"].endswith("Exception")
                         for event in result
                     )
 
                     # If this flow had a stop event
                     if has_stop:
                         stopped_task_results = task_results[flow_id] + result
+                        stopped_task_processing_logs = task_processing_logs[flow_id].copy()
 
                         # Cancel all remaining tasks
                         for pending_task in tasks:
                             # Don't include results and processing logs for cancelled or stopped tasks
-                            if (
-                                pending_task != unique_flow_ids[flow_id]
-                                and not pending_task.done()
-                            ):
+                            if pending_task != unique_flow_ids[flow_id] and not pending_task.done():
                                 # Cancel the task if it is not done
                                 pending_task.cancel()
                                 # Find the flow_uid for this task and remove it from the dict
@@ -392,6 +372,7 @@ class RuntimeV1_0(Runtime):
                                     if v == pending_task:
                                         del unique_flow_ids[k]
                                         break
+                        # Remove the stopped flow from unique_flow_ids so it's not in finished_task_results
                         del unique_flow_ids[flow_id]
                         break
                     else:
@@ -433,14 +414,16 @@ class RuntimeV1_0(Runtime):
             finished_task_processing_logs.extend(task_processing_logs[flow_id])
 
         if processing_log:
-            for plog in finished_task_processing_logs:
-                # Filter out "Listen" and "start_flow" events from task processing log
-                if plog["type"] == "event" and (
-                    plog["data"]["type"] == "Listen"
-                    or plog["data"]["type"] == "start_flow"
-                ):
-                    continue
-                processing_log.append(plog)
+
+            def filter_and_append(logs, target_log):
+                for plog in logs:
+                    if plog["type"] == "event" and (plog["data"]["type"] == "start_flow"):
+                        continue
+                    target_log.append(plog)
+
+            # Only append finished rails logs. Stopped rail logs should not be appended
+            # again since they're already in the processing log from when they started
+            filter_and_append(finished_task_processing_logs, processing_log)
 
         # We pack all events into a single event to add it to the event history.
         history_events = new_event_dict(
@@ -448,45 +431,28 @@ class RuntimeV1_0(Runtime):
             data={"events": finished_task_results},
         )
 
+        # Return stopped_task_results separately so the caller knows to stop processing
         return ActionResult(
             events=[history_events] + stopped_task_results,
             context_updates=context_updates,
         )
 
-    async def _run_input_rails_in_parallel(
-        self, flows: List[str], events: List[dict]
-    ) -> ActionResult:
+    async def _run_input_rails_in_parallel(self, flows: List[str], events: List[dict]) -> ActionResult:
         """Run the input rails in parallel."""
-        pre_events = [
-            (await create_event({"_type": "StartInputRail", "flow_id": flow})).events[0]
-            for flow in flows
-        ]
+        pre_events = [(await create_event({"_type": "StartInputRail", "flow_id": flow})).events[0] for flow in flows]
         post_events = [
-            (
-                await create_event({"_type": "InputRailFinished", "flow_id": flow})
-            ).events[0]
-            for flow in flows
+            (await create_event({"_type": "InputRailFinished", "flow_id": flow})).events[0] for flow in flows
         ]
 
         return await self._run_flows_in_parallel(
             flows=flows, events=events, pre_events=pre_events, post_events=post_events
         )
 
-    async def _run_output_rails_in_parallel(
-        self, flows: List[str], events: List[dict]
-    ) -> ActionResult:
+    async def _run_output_rails_in_parallel(self, flows: List[str], events: List[dict]) -> ActionResult:
         """Run the output rails in parallel."""
-        pre_events = [
-            (await create_event({"_type": "StartOutputRail", "flow_id": flow})).events[
-                0
-            ]
-            for flow in flows
-        ]
+        pre_events = [(await create_event({"_type": "StartOutputRail", "flow_id": flow})).events[0] for flow in flows]
         post_events = [
-            (
-                await create_event({"_type": "OutputRailFinished", "flow_id": flow})
-            ).events[0]
-            for flow in flows
+            (await create_event({"_type": "OutputRailFinished", "flow_id": flow})).events[0] for flow in flows
         ]
 
         return await self._run_flows_in_parallel(
@@ -514,9 +480,7 @@ class RuntimeV1_0(Runtime):
                 action_name = action_info["action_name"]
                 params = action_info["params"]
 
-                result_tuple = await self.action_dispatcher.execute_action(
-                    action_name, params
-                )
+                result_tuple = await self.action_dispatcher.execute_action(action_name, params)
                 result, status = result_tuple
 
                 if status != "success":
@@ -623,9 +587,7 @@ class RuntimeV1_0(Runtime):
         # TODO: check action is available in action server
         if fn is None:
             status = "failed"
-            result = self._internal_error_action_result(
-                f"Action '{action_name}' not found."
-            )
+            result = self._internal_error_action_result(f"Action '{action_name}' not found.")
 
         else:
             context = compute_context(events)
@@ -643,12 +605,6 @@ class RuntimeV1_0(Runtime):
                 parameters = inspect.signature(fn).parameters
                 action_type = "function"
 
-            elif isinstance(fn, Chain):
-                # If we're dealing with a chain, we list the annotations
-                # TODO: make some additional type checking here
-                parameters = fn.input_keys
-                action_type = "chain"
-
             # For every parameter that start with "__context__", we pass the value
             for parameter_name in parameters:
                 if parameter_name.startswith("__context__"):
@@ -662,15 +618,9 @@ class RuntimeV1_0(Runtime):
                     if var_name in context:
                         kwargs[k] = context[var_name]
 
-            # If we have an action server, we use it for non-system/non-chain actions
-            if (
-                self.config.actions_server_url
-                and not action_meta.get("is_system_action")
-                and action_type != "chain"
-            ):
-                result, status = await self._get_action_resp(
-                    action_meta, action_name, kwargs
-                )
+            # If we have an action server, we use it for non-system actions
+            if self.config.actions_server_url and not action_meta.get("is_system_action"):
+                result, status = await self._get_action_resp(action_meta, action_name, kwargs)
             else:
                 # We don't send these to the actions server;
                 # TODO: determine if we should
@@ -691,23 +641,16 @@ class RuntimeV1_0(Runtime):
                     if k in parameters:
                         kwargs[k] = v
 
-                if (
-                    "llm" in kwargs
-                    and f"{action_name}_llm" in self.registered_action_params
-                ):
+                if "llm" in kwargs and f"{action_name}_llm" in self.registered_action_params:
                     kwargs["llm"] = self.registered_action_params[f"{action_name}_llm"]
 
                 log.info("Executing action :: %s", action_name)
-                result, status = await self.action_dispatcher.execute_action(
-                    action_name, kwargs
-                )
+                result, status = await self.action_dispatcher.execute_action(action_name, kwargs)
 
             # If the action execution failed, we return a hardcoded message
             if status == "failed":
                 # TODO: make this message configurable.
-                result = self._internal_error_action_result(
-                    "I'm sorry, an internal error has occurred."
-                )
+                result = self._internal_error_action_result("I'm sorry, an internal error has occurred.")
 
         return_value = result
         return_events = []
@@ -767,17 +710,10 @@ class RuntimeV1_0(Runtime):
         try:
             # Call the Actions Server if it is available.
             # But not for system actions, those should still run locally.
-            if (
-                action_meta.get("is_system_action", False)
-                or self.config.actions_server_url is None
-            ):
-                result, status = await self.action_dispatcher.execute_action(
-                    action_name, kwargs
-                )
+            if action_meta.get("is_system_action", False) or self.config.actions_server_url is None:
+                result, status = await self.action_dispatcher.execute_action(action_name, kwargs)
             else:
-                url = urljoin(
-                    self.config.actions_server_url, "/v1/actions/run"
-                )  # action server execute action path
+                url = urljoin(self.config.actions_server_url, "/v1/actions/run")  # action server execute action path
                 data = {"action_name": action_name, "action_parameters": kwargs}
                 async with aiohttp.ClientSession() as session:
                     try:
@@ -800,9 +736,7 @@ class RuntimeV1_0(Runtime):
             log.info(f"Failed to get response from {action_name} due to exception {e}")
         return result, status
 
-    async def _process_start_flow(
-        self, events: List[dict], processing_log: List[dict]
-    ) -> List[dict]:
+    async def _process_start_flow(self, events: List[dict], processing_log: List[dict]) -> List[dict]:
         """
         Start a flow.
 
@@ -840,8 +774,6 @@ class RuntimeV1_0(Runtime):
         # And we compute the next steps. The new flow should match the current event,
         # and start.
 
-        next_steps = await self._compute_next_steps(
-            events, processing_log=processing_log
-        )
+        next_steps = await self._compute_next_steps(events, processing_log=processing_log)
 
         return next_steps

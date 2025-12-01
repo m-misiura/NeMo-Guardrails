@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -477,11 +477,7 @@ def create_clavata_response(
             results=[
                 Result(
                     report=Report(
-                        result=(
-                            "OUTCOME_FAILED"
-                            if failed
-                            else ("OUTCOME_TRUE" if labels else "OUTCOME_FALSE")
-                        ),
+                        result=("OUTCOME_FAILED" if failed else ("OUTCOME_TRUE" if labels else "OUTCOME_FALSE")),
                         sectionEvaluationReports=[
                             SectionReport(
                                 name=lbl,

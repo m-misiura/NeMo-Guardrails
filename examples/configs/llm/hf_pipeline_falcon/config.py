@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,8 +45,6 @@ def get_falcon_7b_llm():
     return llm
 
 
-HFPipelineFalcon = get_llm_instance_wrapper(
-    llm_instance=get_falcon_7b_llm(), llm_type="hf_pipeline_falcon"
-)
+HFPipelineFalcon = get_llm_instance_wrapper(llm_instance=get_falcon_7b_llm(), llm_type="hf_pipeline_falcon")
 
 register_llm_provider("hf_pipeline_falcon", HFPipelineFalcon)

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,14 +61,10 @@ def _test_call(config_id):
 
 
 def test_1():
-    api.app.rails_config_path = os.path.join(
-        os.path.dirname(__file__), "test_configs", "simple_server"
-    )
+    api.app.rails_config_path = os.path.join(os.path.dirname(__file__), "test_configs", "simple_server")
     _test_call("config_1")
 
 
 def test_2():
-    api.app.rails_config_path = os.path.join(
-        os.path.dirname(__file__), "test_configs", "simple_server_2_x"
-    )
+    api.app.rails_config_path = os.path.join(os.path.dirname(__file__), "test_configs", "simple_server_2_x")
     _test_call("config_2")

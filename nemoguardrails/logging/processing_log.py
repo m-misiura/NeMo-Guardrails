@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,6 @@
 import contextvars
 from typing import List
 
-from nemoguardrails.logging.explain import LLMCallInfo
 from nemoguardrails.rails.llm.options import (
     ActivatedRail,
     ExecutedAction,
@@ -75,11 +74,7 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
                     continue
 
                 activated_rail = ActivatedRail(
-                    type=(
-                        "dialog"
-                        if event["flow_id"] not in generation_flows
-                        else "generation"
-                    ),
+                    type=("dialog" if event["flow_id"] not in generation_flows else "generation"),
                     name=event["flow_id"],
                     started_at=event["timestamp"],
                 )
@@ -87,20 +82,13 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
 
             # If we're dealing with a dialog rail, we check that the name still corresponds
             # otherwise we create a new rail.
-            if (
-                activated_rail.type == "dialog"
-                and activated_rail.name != event["flow_id"]
-            ):
+            if activated_rail.type == "dialog" and activated_rail.name != event["flow_id"]:
                 # We ignore certain system flows
                 if event["flow_id"] in ignored_flows:
                     continue
 
                 activated_rail = ActivatedRail(
-                    type=(
-                        "dialog"
-                        if event["flow_id"] not in generation_flows
-                        else "generation"
-                    ),
+                    type=("dialog" if event["flow_id"] not in generation_flows else "generation"),
                     name=event["flow_id"],
                     started_at=event["timestamp"],
                 )
@@ -110,9 +98,7 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
                 if step["type"] == "StartInternalSystemAction":
                     action_name = step["action_name"]
                     if action_name not in ignored_actions:
-                        activated_rail.decisions.append(
-                            f"execute {step['action_name']}"
-                        )
+                        activated_rail.decisions.append(f"execute {step['action_name']}")
 
                 elif step["type"] == "BotIntent":
                     activated_rail.decisions.append(step["intent"])
@@ -153,25 +139,26 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
                     action_params=event_data["action_params"],
                     started_at=event["timestamp"],
                 )
-                activated_rail.executed_actions.append(executed_action)
+                if activated_rail is not None:
+                    activated_rail.executed_actions.append(executed_action)
 
             elif event_type == "InternalSystemActionFinished":
                 action_name = event_data["action_name"]
                 if action_name in ignored_actions:
                     continue
 
-                executed_action.finished_at = event["timestamp"]
-                executed_action.duration = (
-                    executed_action.finished_at - executed_action.started_at
-                )
-                executed_action.return_value = event_data["return_value"]
+                if executed_action is not None:
+                    executed_action.finished_at = event["timestamp"]
+                    if executed_action.finished_at is not None and executed_action.started_at is not None:
+                        executed_action.duration = executed_action.finished_at - executed_action.started_at
+                    executed_action.return_value = event_data["return_value"]
                 executed_action = None
 
             elif event_type in ["InputRailFinished", "OutputRailFinished"]:
-                activated_rail.finished_at = event["timestamp"]
-                activated_rail.duration = (
-                    activated_rail.finished_at - activated_rail.started_at
-                )
+                if activated_rail is not None:
+                    activated_rail.finished_at = event["timestamp"]
+                    if activated_rail.finished_at is not None and activated_rail.started_at is not None:
+                        activated_rail.duration = activated_rail.finished_at - activated_rail.started_at
                 activated_rail = None
 
             elif event_type == "InputRailsFinished":
@@ -180,19 +167,31 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
             elif event_type == "OutputRailsFinished":
                 output_rails_finished_at = event["timestamp"]
 
+            elif event_type.endswith("Exception"):
+                if activated_rail is not None and activated_rail.type in [
+                    "input",
+                    "output",
+                ]:
+                    activated_rail.stop = True
+                    if "stop" not in activated_rail.decisions:
+                        activated_rail.decisions.append("stop")
+
         elif event["type"] == "llm_call_info":
-            executed_action.llm_calls.append(event["data"])
+            if executed_action is not None:
+                executed_action.llm_calls.append(event["data"])
 
     # If at the end of the processing we still have an active rail, it is because
     # we have hit a stop. In this case, we take the last timestamp as the timestamp for
     # finishing the rail.
     if activated_rail is not None:
         activated_rail.finished_at = last_timestamp
-        activated_rail.duration = activated_rail.finished_at - activated_rail.started_at
+        if activated_rail.finished_at is not None and activated_rail.started_at is not None:
+            activated_rail.duration = activated_rail.finished_at - activated_rail.started_at
 
         if activated_rail.type in ["input", "output"]:
             activated_rail.stop = True
-            activated_rail.decisions.append("stop")
+            if "stop" not in activated_rail.decisions:
+                activated_rail.decisions.append("stop")
 
     # If we have input rails, we also record the general stats
     if input_rails_started_at:
@@ -201,9 +200,7 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
         if input_rails_finished_at is None:
             input_rails_finished_at = last_timestamp
 
-        generation_log.stats.input_rails_duration = (
-            input_rails_finished_at - input_rails_started_at
-        )
+        generation_log.stats.input_rails_duration = input_rails_finished_at - input_rails_started_at
 
     # For all the dialog/generation rails, we set the finished time and the duration based on
     # the rail right after.
@@ -213,9 +210,8 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
         if activated_rail.type in ["dialog", "generation"]:
             next_rail = generation_log.activated_rails[i + 1]
             activated_rail.finished_at = next_rail.started_at
-            activated_rail.duration = (
-                activated_rail.finished_at - activated_rail.started_at
-            )
+            if activated_rail.finished_at is not None and activated_rail.started_at is not None:
+                activated_rail.duration = activated_rail.finished_at - activated_rail.started_at
 
     # If we have output rails, we also record the general stats
     if output_rails_started_at:
@@ -224,9 +220,7 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
         if output_rails_finished_at is None:
             output_rails_finished_at = last_timestamp
 
-        generation_log.stats.output_rails_duration = (
-            output_rails_finished_at - output_rails_started_at
-        )
+        generation_log.stats.output_rails_duration = output_rails_finished_at - output_rails_started_at
 
     # We also need to compute the stats for dialog rails and generation.
     # And the stats for the LLM calls.
@@ -239,10 +233,7 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
             if len(activated_rail.executed_actions) == 1:
                 executed_action = activated_rail.executed_actions[0]
 
-                if (
-                    len(executed_action.llm_calls) == 1
-                    and executed_action.llm_calls[0].task == "general"
-                ):
+                if len(executed_action.llm_calls) == 1 and executed_action.llm_calls[0].task == "general":
                     activated_rail.type = "generation"
 
         if activated_rail.type == "dialog" and activated_rail.duration:
@@ -257,20 +248,20 @@ def compute_generation_log(processing_log: List[dict]) -> GenerationLog:
 
         for executed_action in activated_rail.executed_actions:
             for llm_call in executed_action.llm_calls:
-                generation_log.stats.llm_calls_count += 1
-                generation_log.stats.llm_calls_duration += llm_call.duration
-                generation_log.stats.llm_calls_total_prompt_tokens += (
-                    llm_call.prompt_tokens or 0
+                generation_log.stats.llm_calls_count = (generation_log.stats.llm_calls_count or 0) + 1
+                generation_log.stats.llm_calls_duration = (generation_log.stats.llm_calls_duration or 0) + (
+                    llm_call.duration or 0
                 )
-                generation_log.stats.llm_calls_total_completion_tokens += (
-                    llm_call.completion_tokens or 0
-                )
-                generation_log.stats.llm_calls_total_tokens += (
+                generation_log.stats.llm_calls_total_prompt_tokens = (
+                    generation_log.stats.llm_calls_total_prompt_tokens or 0
+                ) + (llm_call.prompt_tokens or 0)
+                generation_log.stats.llm_calls_total_completion_tokens = (
+                    generation_log.stats.llm_calls_total_completion_tokens or 0
+                ) + (llm_call.completion_tokens or 0)
+                generation_log.stats.llm_calls_total_tokens = (generation_log.stats.llm_calls_total_tokens or 0) + (
                     llm_call.total_tokens or 0
                 )
 
-    generation_log.stats.total_duration = (
-        processing_log[-1]["timestamp"] - processing_log[0]["timestamp"]
-    )
+    generation_log.stats.total_duration = processing_log[-1]["timestamp"] - processing_log[0]["timestamp"]
 
     return generation_log

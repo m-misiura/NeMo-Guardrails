@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,9 +22,7 @@ from nemoguardrails.server.api import register_datastore
 from nemoguardrails.server.datastore.memory_store import MemoryStore
 
 register_datastore(MemoryStore())
-api.app.rails_config_path = os.path.join(
-    os.path.dirname(__file__), "test_configs", "simple_server"
-)
+api.app.rails_config_path = os.path.join(os.path.dirname(__file__), "test_configs", "simple_server")
 client = TestClient(api.app)
 
 

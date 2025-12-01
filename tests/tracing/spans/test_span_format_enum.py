@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import json
-from typing import Any
 
 import pytest
 
@@ -204,6 +203,4 @@ class TestSpanFormatIntegration:
         """Ensure all enum values are tested."""
         tested_values = {"legacy", "opentelemetry"}
         actual_values = {format_enum.value for format_enum in SpanFormat}
-        assert (
-            tested_values == actual_values
-        ), f"Missing tests for: {actual_values - tested_values}"
+        assert tested_values == actual_values, f"Missing tests for: {actual_values - tested_values}"

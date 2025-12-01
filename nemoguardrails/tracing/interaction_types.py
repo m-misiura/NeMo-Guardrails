@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,9 +29,7 @@ class InteractionLog(BaseModel):
 
     id: str = Field(description="A human readable id of the interaction.")
 
-    activated_rails: List[ActivatedRail] = Field(
-        default_factory=list, description="Details about the activated rails."
-    )
+    activated_rails: List[ActivatedRail] = Field(default_factory=list, description="Details about the activated rails.")
     events: List[dict] = Field(
         default_factory=list,
         description="The full list of events recorded during the interaction.",
@@ -46,9 +44,7 @@ class InteractionOutput(BaseModel):
 
     id: str = Field(description="A human readable id of the interaction.")
     input: Any = Field(description="The input for the interaction.")
-    output: Optional[Any] = Field(
-        default=None, description="The output of the interaction."
-    )
+    output: Optional[Any] = Field(default=None, description="The output of the interaction.")
 
 
 def extract_interaction_log(
@@ -78,6 +74,6 @@ def extract_interaction_log(
     return InteractionLog(
         id=interaction_output.id,
         activated_rails=generation_log.activated_rails,
-        events=generation_log.internal_events,
+        events=generation_log.internal_events or [],
         trace=spans,
     )

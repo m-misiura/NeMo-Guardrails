@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,11 +24,9 @@ class SnowflakeEmbed:
         from transformers import AutoModel, AutoTokenizer
 
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            "snowflake/snowflake-arctic-embed-m-long"
-        )
+        self.tokenizer = AutoTokenizer.from_pretrained("Snowflake/snowflake-arctic-embed-m-long")
         self.model = AutoModel.from_pretrained(
-            "snowflake/snowflake-arctic-embed-m-long",
+            "Snowflake/snowflake-arctic-embed-m-long",
             trust_remote_code=True,
             add_pooling_layer=False,
             safe_serialization=True,
@@ -37,9 +35,7 @@ class SnowflakeEmbed:
         self.model.eval()
 
     def __call__(self, text: str):
-        tokens = self.tokenizer(
-            [text], padding=True, truncation=True, return_tensors="pt", max_length=2048
-        )
+        tokens = self.tokenizer([text], padding=True, truncation=True, return_tensors="pt", max_length=2048)
         tokens = tokens.to(self.device)
         embeddings = self.model(**tokens)[0][:, 0]
         return embeddings.detach().cpu().squeeze(0).numpy()

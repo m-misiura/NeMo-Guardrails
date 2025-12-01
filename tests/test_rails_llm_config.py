@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import pytest
-from pydantic import ValidationError
 
 from nemoguardrails.rails.llm.config import Model
 
@@ -35,9 +34,7 @@ def test_model_in_parameters():
 
 def test_model_name_in_parameters():
     """Test model specified via model_name in parameters dictionary."""
-    model = Model(
-        type="main", engine="test_engine", parameters={"model_name": "test_model"}
-    )
+    model = Model(type="main", engine="test_engine", parameters={"model_name": "test_model"})
     assert model.model == "test_model"
     assert "model_name" not in model.parameters
 
@@ -45,9 +42,7 @@ def test_model_name_in_parameters():
 def test_model_equivalence():
     """Test that models defined in different ways are considered equivalent."""
     model1 = Model(type="main", engine="test_engine", model="test_model")
-    model2 = Model(
-        type="main", engine="test_engine", parameters={"model": "test_model"}
-    )
+    model2 = Model(type="main", engine="test_engine", parameters={"model": "test_model"})
     assert model1 == model2
 
 
@@ -71,9 +66,7 @@ def test_none_model_and_none_parameters():
 
 def test_model_and_model_name_in_parameters():
     """Test that having both model and model_name in parameters raises an error."""
-    with pytest.raises(
-        ValueError, match="Model name must be specified in exactly one place"
-    ):
+    with pytest.raises(ValueError, match="Model name must be specified in exactly one place"):
         Model(
             type="main",
             engine="openai",
@@ -84,9 +77,7 @@ def test_model_and_model_name_in_parameters():
 
 def test_model_and_model_in_parameters():
     """Test that having both model field and model in parameters raises an error."""
-    with pytest.raises(
-        ValueError, match="Model name must be specified in exactly one place"
-    ):
+    with pytest.raises(ValueError, match="Model name must be specified in exactly one place"):
         Model(
             type="main",
             engine="openai",

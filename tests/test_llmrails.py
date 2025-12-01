@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +14,16 @@
 # limitations under the License.
 
 import os
-from typing import Any, Dict, List, Optional, Union
-from unittest.mock import patch
+from typing import Optional
+from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_core.language_models import BaseChatModel
 
 from nemoguardrails import LLMRails, RailsConfig
+from nemoguardrails.logging.explain import ExplainInfo
 from nemoguardrails.rails.llm.config import Model
-from nemoguardrails.rails.llm.llmrails import get_action_details_from_flow_id
+from tests.conftest import REASONING_TRACE_MOCK_PATH
 from tests.utils import FakeLLM, clean_events, event_sequence_conforms
 
 
@@ -94,9 +96,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "UserMessage", "text": "$user_message"}
-            },
+            "action_params": {"event": {"_type": "UserMessage", "text": "$user_message"}},
             "action_result_key": None,
             "is_system_action": True,
             "source_uid": "NeMoGuardrails",
@@ -104,9 +104,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "UserMessage", "text": "$user_message"}
-            },
+            "action_params": {"event": {"_type": "UserMessage", "text": "$user_message"}},
             "action_result_key": None,
             "events": [
                 {
@@ -231,9 +229,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}
-            },
+            "action_params": {"event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}},
             "action_result_key": None,
             "is_system_action": True,
             "source_uid": "NeMoGuardrails",
@@ -241,9 +237,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}
-            },
+            "action_params": {"event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}},
             "action_result_key": None,
             "events": [
                 {
@@ -292,9 +286,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "UserMessage", "text": "$user_message"}
-            },
+            "action_params": {"event": {"_type": "UserMessage", "text": "$user_message"}},
             "action_result_key": None,
             "is_system_action": True,
             "source_uid": "NeMoGuardrails",
@@ -302,9 +294,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "UserMessage", "text": "$user_message"}
-            },
+            "action_params": {"event": {"_type": "UserMessage", "text": "$user_message"}},
             "action_result_key": None,
             "events": [
                 {
@@ -444,9 +434,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}
-            },
+            "action_params": {"event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}},
             "action_result_key": None,
             "is_system_action": True,
             "source_uid": "NeMoGuardrails",
@@ -454,9 +442,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}
-            },
+            "action_params": {"event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}},
             "action_result_key": None,
             "events": [
                 {
@@ -549,9 +535,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}
-            },
+            "action_params": {"event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}},
             "action_result_key": None,
             "is_system_action": True,
             "source_uid": "NeMoGuardrails",
@@ -559,9 +543,7 @@ async def test_1(rails_config):
         },
         {
             "action_name": "create_event",
-            "action_params": {
-                "event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}
-            },
+            "action_params": {"event": {"_type": "StartUtteranceBotAction", "script": "$bot_message"}},
             "action_result_key": None,
             "events": [
                 {
@@ -669,9 +651,7 @@ async def test_llm_config_precedence(mock_init, llm_config_with_main):
     events = [{"type": "UtteranceUserActionFinished", "final_transcript": "Hello!"}]
     new_events = await llm_rails.runtime.generate_events(events)
     assert any(event.get("intent") == "express greeting" for event in new_events)
-    assert not any(
-        event.get("intent") == "this should not be used" for event in new_events
-    )
+    assert not any(event.get("intent") == "this should not be used" for event in new_events)
 
 
 @pytest.mark.asyncio
@@ -779,16 +759,14 @@ async def test_llm_constructor_with_empty_models_config():
     "nemoguardrails.rails.llm.llmrails.init_llm_model",
     return_value=FakeLLM(responses=["safe"]),
 )
-async def test_main_llm_from_config_registered_as_action_param(
-    mock_init, llm_config_with_main
-):
+async def test_main_llm_from_config_registered_as_action_param(mock_init, llm_config_with_main):
     """Test that main LLM initialized from config is properly registered as action parameter.
 
     This test ensures that when no LLM is provided via constructor and the main LLM
     is initialized from the config, it gets properly registered as an action parameter.
     This prevents the regression where actions expecting an 'llm' parameter would receive None.
     """
-    from langchain_core.language_models.llms import BaseLLM
+    from langchain_core.language_models import BaseLLM
 
     from nemoguardrails.actions import action
 
@@ -824,10 +802,7 @@ async def test_main_llm_from_config_registered_as_action_param(
 
     action_finished_event = None
     for event in result_events:
-        if (
-            event["type"] == "InternalSystemActionFinished"
-            and event["action_name"] == "test_llm_action"
-        ):
+        if event["type"] == "InternalSystemActionFinished" and event["action_name"] == "test_llm_action":
             action_finished_event = event
             break
 
@@ -1125,9 +1100,7 @@ def test_register_methods_return_self():
         def search(self, text, max_results=5):
             return []
 
-    result = rails.register_embedding_search_provider(
-        "dummy_provider", DummyEmbeddingProvider
-    )
+    result = rails.register_embedding_search_provider("dummy_provider", DummyEmbeddingProvider)
     assert result is rails, "register_embedding_search_provider should return self"
 
     # Test register_embedding_provider returns self
@@ -1170,3 +1143,303 @@ def test_method_chaining():
     assert "chained_action" in rails.runtime.action_dispatcher.registered_actions
     assert "chained_param" in rails.runtime.registered_action_params
     assert rails.runtime.registered_action_params["chained_param"] == "param_value"
+
+
+def test_explain_calls_ensure_explain_info():
+    """Make sure if no `explain_info` attribute is present in LLMRails it's populated with
+    an empty ExplainInfo object"""
+
+    mock_llm = MagicMock(spec=BaseChatModel)
+    config = RailsConfig.from_content(config={"models": []})
+    rails = LLMRails(config=config, llm=mock_llm)
+    rails.generate(messages=[{"role": "user", "content": "Hi!"}])
+
+    rails.explain_info = None
+    info = rails.explain()
+    assert info == ExplainInfo()
+    assert rails.explain_info == ExplainInfo()
+
+
+@patch("nemoguardrails.rails.llm.llmrails.init_llm_model")
+def test_cache_initialization_disabled_by_default(mock_init_llm_model):
+    mock_llm = FakeLLM(responses=["response"])
+    mock_init_llm_model.return_value = mock_llm
+
+    config = RailsConfig(
+        models=[
+            Model(
+                type="main",
+                engine="fake",
+                model="fake",
+            ),
+            Model(
+                type="content_safety",
+                engine="fake",
+                model="fake",
+            ),
+        ]
+    )
+
+    rails = LLMRails(config=config, verbose=False)
+    model_caches = rails.runtime.registered_action_params.get("model_caches")
+
+    assert model_caches is None or len(model_caches) == 0
+
+
+@patch("nemoguardrails.rails.llm.llmrails.init_llm_model")
+def test_cache_initialization_with_enabled_cache(mock_init_llm_model):
+    from nemoguardrails.rails.llm.config import CacheStatsConfig, ModelCacheConfig
+
+    mock_llm = FakeLLM(responses=["response"])
+    mock_init_llm_model.return_value = mock_llm
+
+    config = RailsConfig(
+        models=[
+            Model(
+                type="main",
+                engine="fake",
+                model="fake",
+            ),
+            Model(
+                type="content_safety",
+                engine="fake",
+                model="fake",
+                cache=ModelCacheConfig(
+                    enabled=True,
+                    maxsize=1000,
+                    stats=CacheStatsConfig(enabled=False),
+                ),
+            ),
+        ]
+    )
+
+    rails = LLMRails(config=config, verbose=False)
+    model_caches = rails.runtime.registered_action_params.get("model_caches", {})
+
+    assert "content_safety" in model_caches
+    assert model_caches["content_safety"] is not None
+    assert model_caches["content_safety"].maxsize == 1000
+
+
+@patch("nemoguardrails.rails.llm.llmrails.init_llm_model")
+def test_cache_not_created_for_main_and_embeddings_models(mock_init_llm_model):
+    from nemoguardrails.rails.llm.config import ModelCacheConfig
+
+    mock_llm = FakeLLM(responses=["response"])
+    mock_init_llm_model.return_value = mock_llm
+
+    config = RailsConfig(
+        models=[
+            Model(
+                type="main",
+                engine="fake",
+                model="fake",
+                cache=ModelCacheConfig(enabled=True, maxsize=1000),
+            ),
+            Model(
+                type="embeddings",
+                engine="fake",
+                model="fake",
+                cache=ModelCacheConfig(enabled=True, maxsize=1000),
+            ),
+        ]
+    )
+
+    rails = LLMRails(config=config, verbose=False)
+    model_caches = rails.runtime.registered_action_params.get("model_caches", {})
+
+    assert "main" not in model_caches
+    assert "embeddings" not in model_caches
+
+
+@patch("nemoguardrails.rails.llm.llmrails.init_llm_model")
+def test_cache_initialization_with_zero_maxsize_raises_error(mock_init_llm_model):
+    from nemoguardrails.rails.llm.config import ModelCacheConfig
+
+    mock_llm = FakeLLM(responses=["response"])
+    mock_init_llm_model.return_value = mock_llm
+
+    config = RailsConfig(
+        models=[
+            Model(
+                type="content_safety",
+                engine="fake",
+                model="fake",
+                cache=ModelCacheConfig(enabled=True, maxsize=0),
+            ),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="Invalid cache maxsize"):
+        LLMRails(config=config, verbose=False)
+
+
+@patch("nemoguardrails.rails.llm.llmrails.init_llm_model")
+def test_cache_initialization_with_stats_enabled(mock_init_llm_model):
+    from nemoguardrails.rails.llm.config import CacheStatsConfig, ModelCacheConfig
+
+    mock_llm = FakeLLM(responses=["response"])
+    mock_init_llm_model.return_value = mock_llm
+
+    config = RailsConfig(
+        models=[
+            Model(
+                type="content_safety",
+                engine="fake",
+                model="fake",
+                cache=ModelCacheConfig(
+                    enabled=True,
+                    maxsize=5000,
+                    stats=CacheStatsConfig(enabled=True, log_interval=60.0),
+                ),
+            ),
+        ]
+    )
+
+    rails = LLMRails(config=config, verbose=False)
+    model_caches = rails.runtime.registered_action_params.get("model_caches", {})
+
+    cache = model_caches["content_safety"]
+    assert cache is not None
+    assert cache.track_stats is True
+    assert cache.stats_logging_interval == 60.0
+    assert cache.supports_stats_logging() is True
+
+
+@patch("nemoguardrails.rails.llm.llmrails.init_llm_model")
+def test_cache_initialization_with_multiple_models(mock_init_llm_model):
+    from nemoguardrails.rails.llm.config import ModelCacheConfig
+
+    mock_llm = FakeLLM(responses=["response"])
+    mock_init_llm_model.return_value = mock_llm
+
+    config = RailsConfig(
+        models=[
+            Model(
+                type="main",
+                engine="fake",
+                model="fake",
+            ),
+            Model(
+                type="content_safety",
+                engine="fake",
+                model="fake",
+                cache=ModelCacheConfig(enabled=True, maxsize=1000),
+            ),
+            Model(
+                type="jailbreak_detection",
+                engine="fake",
+                model="fake",
+                cache=ModelCacheConfig(enabled=True, maxsize=2000),
+            ),
+        ]
+    )
+
+    rails = LLMRails(config=config, verbose=False)
+    model_caches = rails.runtime.registered_action_params.get("model_caches", {})
+
+    assert "main" not in model_caches
+    assert "content_safety" in model_caches
+    assert "jailbreak_detection" in model_caches
+    assert model_caches["content_safety"].maxsize == 1000
+    assert model_caches["jailbreak_detection"].maxsize == 2000
+
+
+@pytest.mark.asyncio
+async def test_generate_async_reasoning_content_field_passthrough():
+    from nemoguardrails.rails.llm.options import GenerationOptions
+
+    test_reasoning_trace = "Let me think about this step by step..."
+
+    with patch(REASONING_TRACE_MOCK_PATH) as mock_get_reasoning:
+        mock_get_reasoning.return_value = test_reasoning_trace
+
+        config = RailsConfig.from_content(config={"models": []})
+        llm = FakeLLM(responses=["The answer is 42"])
+        llm_rails = LLMRails(config=config, llm=llm)
+
+        result = await llm_rails.generate_async(
+            messages=[{"role": "user", "content": "What is the answer?"}],
+            options=GenerationOptions(),
+        )
+
+        assert result.reasoning_content == test_reasoning_trace
+        assert isinstance(result.response, list)
+        assert result.response[0]["content"] == "The answer is 42"
+
+
+@pytest.mark.asyncio
+async def test_generate_async_reasoning_content_none():
+    from nemoguardrails.rails.llm.options import GenerationOptions
+
+    with patch(REASONING_TRACE_MOCK_PATH) as mock_get_reasoning:
+        mock_get_reasoning.return_value = None
+
+        config = RailsConfig.from_content(config={"models": []})
+        llm = FakeLLM(responses=["Regular response"])
+        llm_rails = LLMRails(config=config, llm=llm)
+
+        result = await llm_rails.generate_async(
+            messages=[{"role": "user", "content": "Hello"}],
+            options=GenerationOptions(),
+        )
+
+        assert result.reasoning_content is None
+        assert isinstance(result.response, list)
+        assert result.response[0]["content"] == "Regular response"
+
+
+@pytest.mark.asyncio
+async def test_generate_async_reasoning_not_in_response_content():
+    from nemoguardrails.rails.llm.options import GenerationOptions
+
+    test_reasoning_trace = "Let me analyze this carefully..."
+
+    with patch(REASONING_TRACE_MOCK_PATH) as mock_get_reasoning:
+        mock_get_reasoning.return_value = test_reasoning_trace
+
+        config = RailsConfig.from_content(config={"models": []})
+        llm = FakeLLM(responses=["The answer is 42"])
+        llm_rails = LLMRails(config=config, llm=llm)
+
+        result = await llm_rails.generate_async(
+            messages=[{"role": "user", "content": "What is the answer?"}],
+            options=GenerationOptions(),
+        )
+
+        assert result.reasoning_content == test_reasoning_trace
+        assert test_reasoning_trace not in result.response[0]["content"]
+        assert result.response[0]["content"] == "The answer is 42"
+
+
+@pytest.mark.asyncio
+async def test_generate_async_reasoning_with_thinking_tags():
+    test_reasoning_trace = "Step 1: Analyze\nStep 2: Respond"
+
+    with patch(REASONING_TRACE_MOCK_PATH) as mock_get_reasoning:
+        mock_get_reasoning.return_value = test_reasoning_trace
+
+        config = RailsConfig.from_content(config={"models": [], "passthrough": True})
+        llm = FakeLLM(responses=["The answer is 42"])
+        llm_rails = LLMRails(config=config, llm=llm)
+
+        result = await llm_rails.generate_async(messages=[{"role": "user", "content": "What is the answer?"}])
+
+        expected_prefix = f"<think>{test_reasoning_trace}</think>\n"
+        assert result["content"].startswith(expected_prefix)
+        assert "The answer is 42" in result["content"]
+
+
+@pytest.mark.asyncio
+async def test_generate_async_no_thinking_tags_when_no_reasoning():
+    with patch(REASONING_TRACE_MOCK_PATH) as mock_get_reasoning:
+        mock_get_reasoning.return_value = None
+
+        config = RailsConfig.from_content(config={"models": []})
+        llm = FakeLLM(responses=["Regular response"])
+        llm_rails = LLMRails(config=config, llm=llm)
+
+        result = await llm_rails.generate_async(messages=[{"role": "user", "content": "Hello"}])
+
+        assert not result["content"].startswith("<think>")
+        assert result["content"] == "Regular response"

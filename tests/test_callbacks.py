@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,12 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from langchain.schema import Generation, LLMResult
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from langchain_core.outputs import ChatGeneration, Generation, LLMResult
 
 from nemoguardrails.context import explain_info_var, llm_call_info_var, llm_stats_var
 from nemoguardrails.logging.callbacks import LoggingCallbackHandler
@@ -125,9 +131,7 @@ async def test_no_token_usage_tracking_without_metadata():
 
     assert llm_call_info.total_tokens is None or llm_call_info.total_tokens == 0
     assert llm_call_info.prompt_tokens is None or llm_call_info.prompt_tokens == 0
-    assert (
-        llm_call_info.completion_tokens is None or llm_call_info.completion_tokens == 0
-    )
+    assert llm_call_info.completion_tokens is None or llm_call_info.completion_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -168,3 +172,89 @@ async def test_multiple_generations_token_accumulation():
     assert llm_stats.get_stat("total_tokens") == 19
     assert llm_stats.get_stat("total_prompt_tokens") == 12
     assert llm_stats.get_stat("total_completion_tokens") == 7
+
+
+@pytest.mark.asyncio
+async def test_tool_message_labeling_in_logging():
+    """Test that tool messages are labeled as 'Tool' in logging output."""
+    llm_call_info = LLMCallInfo()
+    llm_call_info_var.set(llm_call_info)
+
+    llm_stats = LLMStats()
+    llm_stats_var.set(llm_stats)
+
+    explain_info = ExplainInfo()
+    explain_info_var.set(explain_info)
+
+    handler = LoggingCallbackHandler()
+
+    messages = [
+        HumanMessage(content="Hello"),
+        AIMessage(content="Hi there"),
+        SystemMessage(content="System message"),
+        ToolMessage(content="Tool result", tool_call_id="test_tool_call"),
+    ]
+
+    with patch("nemoguardrails.logging.callbacks.log") as mock_log:
+        await handler.on_chat_model_start(
+            serialized={},
+            messages=[messages],
+            run_id=uuid4(),
+        )
+
+        mock_log.info.assert_called()
+
+        logged_prompt = None
+        for call in mock_log.info.call_args_list:
+            if "Prompt Messages" in str(call):
+                logged_prompt = call[0][1]
+                break
+
+        assert logged_prompt is not None
+        assert "[cyan]User[/]" in logged_prompt
+        assert "[cyan]Bot[/]" in logged_prompt
+        assert "[cyan]System[/]" in logged_prompt
+        assert "[cyan]Tool[/]" in logged_prompt
+
+
+@pytest.mark.asyncio
+async def test_unknown_message_type_labeling():
+    """Test that unknown message types display their actual type name."""
+    llm_call_info = LLMCallInfo()
+    llm_call_info_var.set(llm_call_info)
+
+    llm_stats = LLMStats()
+    llm_stats_var.set(llm_stats)
+
+    explain_info = ExplainInfo()
+    explain_info_var.set(explain_info)
+
+    handler = LoggingCallbackHandler()
+
+    class CustomMessage(BaseMessage):
+        def __init__(self, content, msg_type):
+            super().__init__(content=content, type=msg_type)
+
+    messages: list[BaseMessage] = [
+        CustomMessage("Custom message", "custom"),
+        CustomMessage("Function message", "function"),
+    ]
+
+    with patch("nemoguardrails.logging.callbacks.log") as mock_log:
+        await handler.on_chat_model_start(
+            serialized={},
+            messages=[messages],
+            run_id=uuid4(),
+        )
+
+        mock_log.info.assert_called()
+
+        logged_prompt = None
+        for call in mock_log.info.call_args_list:
+            if "Prompt Messages" in str(call):
+                logged_prompt = call[0][1]
+                break
+
+        assert logged_prompt is not None
+        assert "[cyan]Custom[/]" in logged_prompt
+        assert "[cyan]Function[/]" in logged_prompt

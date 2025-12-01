@@ -14,7 +14,6 @@ NeMo Guardrails comes with a library of built-in guardrails that you can easily 
    - [LlamaGuard-based Content Moderation](#llama-guard-based-content-moderation)
    - [Patronus Lynx-based RAG Hallucination Detection](#patronus-lynx-based-rag-hallucination-detection)
    - [Presidio-based Sensitive data detection](#presidio-based-sensitive-data-detection)
-   - BERT-score Hallucination Checking - *[COMING SOON]*
 
 3. Third-Party APIs
    - [ActiveFence Moderation](#activefence)
@@ -27,7 +26,8 @@ NeMo Guardrails comes with a library of built-in guardrails that you can easily 
    - [Fiddler Guardrails for Safety and Hallucination Detection](#fiddler-guardrails-for-safety-and-hallucination-detection)
    - [Prompt Security Protection](#prompt-security-protection)
    - [Pangea AI Guard](#pangea-ai-guard)
-   - OpenAI Moderation API - *[COMING SOON]*
+   - [Trend Micro Vision One AI Application Security](#trend-micro-vision-one-ai-application-security)
+   - [Cisco AI Defense](#cisco-ai-defense)
 
 4. Other
    - [Jailbreak Detection](#jailbreak-detection)
@@ -426,7 +426,7 @@ Similar to the self-check fact-checking, we formulate the consistency checking s
 
 ## NVIDIA Models
 
-NeMo Guardrails provides out of the box connectivity for safety models trained by the NVIDIA for specialized use cases. These models shall be provided as both as HuggingFace checkpoints, and as NVIDIA NIM containers that will provide out of the box TRTLLM support with lower latency.
+NeMo Guardrails provides out of the box connectivity for safety models trained by NVIDIA for specialized use cases. These models are provided as both HuggingFace checkpoints and as NVIDIA NIM containers that provide out of the box TRTLLM support with lower latency.
 
 ### Content Safety
 
@@ -915,6 +915,48 @@ rails:
 
 For more details, check out the [Pangea AI Guard Integration](./community/pangea.md) page.
 
+### Trend Micro Vision One AI Application Security
+
+NeMo Guardrails supports using
+[Trend Micro Vision One AI Guard](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-ai-scanner-ai-guard) for protecting input and output flows within AI-powered applications.
+
+See [Trend Micro](community/trend-micro.md) for more details.
+
+#### Example usage
+
+```yaml
+rails:
+  input:
+    flows:
+      - trend ai guard input
+  output:
+    flows:
+      - trend ai guard output
+```
+
+For more details, check out the [Trend Micro Vision One AI Application Security](./community/trend-micro.md) page.
+
+### Cisco AI Defense
+
+NeMo Guardrails supports using [Cisco AI Defense Inspection](https://www.cisco.com/site/us/en/products/security/ai-defense/index.html?utm_medium=github&utm_campaign=nemo-guardrails) for protecting input and output flows.
+
+To activate the protection, you need to set the `AI_DEFENSE_API_KEY` and `AI_DEFENSE_API_ENDPOINT` environment variables.
+
+#### Example usage
+
+```yaml
+rails:
+  input:
+    flows:
+      - ai defense inspect prompt
+
+  output:
+    flows:
+      - ai defense inspect response
+```
+
+For more details, check out the [Cisco AI Defense Integration](./community/ai-defense.md) page.
+
 ## Other
 
 ### Jailbreak Detection
@@ -992,11 +1034,9 @@ Using the default value allows for detection of 49/50 GCG-style attacks with a 0
 
 To compute the perplexity of a string, the current implementation uses the `gpt2-large` model.
 
-**NOTE**: in future versions, multiple options will be supported.
-
 #### Model-based Jailbreak Detections
 
-There is currently one available model-based detection, using a random forest-based detector trained on [`snowflake/snowflake-arctic-embed-m-long`](https://huggingface.co/Snowflake/snowflake-arctic-embed-m-long) embeddings.
+There is currently one available model-based detection, using a random forest-based detector trained on [`Snowflake/snowflake-arctic-embed-m-long`](https://huggingface.co/Snowflake/snowflake-arctic-embed-m-long) embeddings.
 
 #### Setup
 

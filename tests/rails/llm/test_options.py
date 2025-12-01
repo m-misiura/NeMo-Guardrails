@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,11 @@
 
 import pytest
 
-from nemoguardrails.rails.llm.options import GenerationOptions, GenerationRailsOptions
+from nemoguardrails.rails.llm.options import (
+    GenerationOptions,
+    GenerationRailsOptions,
+    GenerationResponse,
+)
 
 
 def test_generation_options_initialization():
@@ -110,3 +114,131 @@ def test_generation_options_serialization():
     assert '"output":false' in options_json
     assert '"activated_rails":true' in options_json
     assert '"llm_calls":true' in options_json
+
+
+def test_generation_response_initialization():
+    """Test GenerationResponse initialization."""
+    response = GenerationResponse(response="Hello, world!")
+    assert response.response == "Hello, world!"
+    assert response.tool_calls is None
+    assert response.llm_output is None
+    assert response.state is None
+
+
+def test_generation_response_with_tool_calls():
+    test_tool_calls = [
+        {
+            "name": "get_weather",
+            "args": {"location": "NYC"},
+            "id": "call_123",
+            "type": "tool_call",
+        },
+        {
+            "name": "calculate",
+            "args": {"expression": "2+2"},
+            "id": "call_456",
+            "type": "tool_call",
+        },
+    ]
+
+    response = GenerationResponse(
+        response=[{"role": "assistant", "content": "I'll help you with that."}],
+        tool_calls=test_tool_calls,
+    )
+
+    assert response.tool_calls == test_tool_calls
+    assert len(response.tool_calls) == 2
+    assert response.tool_calls[0]["id"] == "call_123"
+    assert response.tool_calls[1]["name"] == "calculate"
+
+
+def test_generation_response_empty_tool_calls():
+    """Test GenerationResponse with empty tool calls list."""
+    response = GenerationResponse(response="No tools needed", tool_calls=[])
+
+    assert response.tool_calls == []
+    assert len(response.tool_calls) == 0
+
+
+def test_generation_response_serialization_with_tool_calls():
+    test_tool_calls = [{"name": "test_func", "args": {}, "id": "call_test", "type": "tool_call"}]
+
+    response = GenerationResponse(response="Response text", tool_calls=test_tool_calls)
+
+    response_dict = response.dict()
+    assert "tool_calls" in response_dict
+    assert response_dict["tool_calls"] == test_tool_calls
+
+    response_json = response.json()
+    assert "tool_calls" in response_json
+    assert "test_func" in response_json
+
+
+def test_generation_response_model_validation():
+    """Test GenerationResponse model validation."""
+    test_tool_calls = [
+        {"name": "valid_function", "args": {}, "id": "call_123", "type": "tool_call"},
+        {"name": "another_function", "args": {}, "id": "call_456", "type": "tool_call"},
+    ]
+
+    response = GenerationResponse(
+        response=[{"role": "assistant", "content": "Test response"}],
+        tool_calls=test_tool_calls,
+        llm_output={"token_usage": {"total_tokens": 50}},
+    )
+
+    assert response.tool_calls is not None
+    assert isinstance(response.tool_calls, list)
+    assert len(response.tool_calls) == 2
+    assert response.llm_output["token_usage"]["total_tokens"] == 50
+
+
+def test_generation_response_with_reasoning_content():
+    test_reasoning = "Step 1: Analyze\nStep 2: Respond"
+
+    response = GenerationResponse(response="Final answer", reasoning_content=test_reasoning)
+
+    assert response.reasoning_content == test_reasoning
+    assert response.response == "Final answer"
+
+
+def test_generation_response_reasoning_content_defaults_to_none():
+    response = GenerationResponse(response="Answer")
+
+    assert response.reasoning_content is None
+
+
+def test_generation_response_reasoning_content_can_be_empty_string():
+    response = GenerationResponse(response="Answer", reasoning_content="")
+
+    assert response.reasoning_content == ""
+
+
+def test_generation_response_serialization_with_reasoning_content():
+    test_reasoning = "Thinking process here"
+
+    response = GenerationResponse(response="Response", reasoning_content=test_reasoning)
+
+    response_dict = response.dict()
+    assert "reasoning_content" in response_dict
+    assert response_dict["reasoning_content"] == test_reasoning
+
+    response_json = response.json()
+    assert "reasoning_content" in response_json
+    assert test_reasoning in response_json
+
+
+def test_generation_response_with_all_fields():
+    test_tool_calls = [{"name": "test_func", "args": {}, "id": "call_123", "type": "tool_call"}]
+    test_reasoning = "Detailed reasoning"
+
+    response = GenerationResponse(
+        response=[{"role": "assistant", "content": "Response"}],
+        tool_calls=test_tool_calls,
+        reasoning_content=test_reasoning,
+        llm_output={"token_usage": {"total_tokens": 100}},
+    )
+
+    assert response.tool_calls == test_tool_calls
+    assert response.reasoning_content == test_reasoning
+    assert response.llm_output["token_usage"]["total_tokens"] == 100

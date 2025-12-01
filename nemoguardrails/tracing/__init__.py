@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,14 +23,16 @@ from .span_extractors import (
 from .spans import SpanEvent, SpanLegacy, SpanOpentelemetry
 from .tracer import Tracer, create_log_adapters
 
-___all__ = [
-    SpanExtractor,
-    SpanExtractorV1,
-    SpanExtractorV2,
-    create_span_extractor,
-    Tracer,
-    create_log_adapters,
-    SpanEvent,
-    SpanLegacy,
-    SpanOpentelemetry,
+__all__ = [
+    "InteractionLog",
+    "InteractionOutput",
+    "SpanExtractor",
+    "SpanExtractorV1",
+    "SpanExtractorV2",
+    "create_span_extractor",
+    "Tracer",
+    "create_log_adapters",
+    "SpanEvent",
+    "SpanLegacy",
+    "SpanOpentelemetry",
 ]
