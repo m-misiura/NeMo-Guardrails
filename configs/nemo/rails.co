@@ -1,0 +1,22 @@
+define flow check message length
+  $length_result = execute check_message_length
+  if $length_result == "blocked_too_long"
+    bot inform message too long
+    stop
+  if $length_result == "warning_long"
+    bot warn message long
+
+define bot inform message too long
+  "That's too long! Please shorten your message considerably."
+
+define bot warn message long
+  "That's quite detailed! How about you shorten this a bit?"
+
+define flow check forbidden words
+  $forbidden_result = execute check_forbidden_words
+  if $forbidden_result != "allowed"
+    bot inform forbidden content
+    stop
+
+define bot inform forbidden content
+  "I can't answer questions about closed source AI models"

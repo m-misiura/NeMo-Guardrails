@@ -1,0 +1,12 @@
+models:
+  - type: main
+    engine: openai
+    parameters:
+      openai_api_base: <INSERT_ME>
+      model_name: <INSERT_ME>
+      api_key: <INSERT_ME>
+rails:
+  input:
+    flows:
+      - check message length
+      - check forbidden words
