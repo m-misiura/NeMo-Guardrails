@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,7 @@ import re
 import time
 import warnings
 from contextlib import asynccontextmanager
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +33,9 @@ from starlette.staticfiles import StaticFiles
 from nemoguardrails import LLMRails, RailsConfig, utils
 from nemoguardrails.rails.llm.options import (
     GenerationLog,
+    GenerationLogOptions,
     GenerationOptions,
+    GenerationRailsOptions,
     GenerationResponse,
 )
 from nemoguardrails.server.datastore.datastore import DataStore
@@ -265,6 +267,48 @@ class ResponseBody(BaseModel):
     )
 
 
+class GuardrailCheckRequestBody(BaseModel):
+    """Request body for the /v1/guardrail/checks endpoint.
+
+    This endpoint validates messages against configured guardrails without generating
+    new content. All guardrail parameters are optionally defined in the configuration - either
+    referenced by config_id or provided inline.
+    """
+
+    model: str = Field(
+        description="The model identifier (informational). "
+        "The actual models used are defined in the guardrail configuration."
+    )
+    messages: List[dict] = Field(
+        description="The list of messages to check against guardrails. "
+        "Each message should have 'role' (user/assistant) and 'content' fields."
+    )
+    guardrails: Optional[dict] = Field(
+        default=None,
+        description="Guardrail configuration. Can contain either 'config_id' (string) to reference "
+        "an existing server configuration, or 'config' (dict) with a complete inline guardrail configuration. "
+        "If not provided, uses the server's default configuration.",
+    )
+    stream: Optional[bool] = Field(default=False, description="Whether to stream results as each message is checked.")
+    use_conversation_context: Optional[bool] = Field(
+        default=False,
+        description="If true, checks all messages together with full conversation context. "
+        "If false (default), checks each message independently.",
+    )
+
+
+class GuardrailCheckResponseBody(BaseModel):
+    """Response body for the /v1/guardrail/checks endpoint."""
+
+    status: Literal["success", "blocked", "error"] = Field(
+        description="Overall status: 'success' if all rails passed, 'blocked' if any rail blocked, 'error' for system errors."
+    )
+    rails_status: Dict[str, dict] = Field(
+        default_factory=dict, description="Status of each individual rail that was executed."
+    )
+    guardrails_data: Optional[dict] = Field(default=None, description="Additional data from guardrail execution.")
+
+
 @app.get(
     "/v1/rails/configs",
     summary="Get List of available rails configurations.",
@@ -476,6 +520,295 @@ async def chat_completion(body: RequestBody, request: Request):
     except Exception as ex:
         log.exception(ex)
         return ResponseBody(messages=[{"role": "assistant", "content": "Internal server error."}])
+
+
+def _create_error_response(error: str, details: Optional[str] = None) -> GuardrailCheckResponseBody:
+    """Create a standardized error response."""
+    guardrails_data = {"error": error}
+    if details:
+        guardrails_data["details"] = details
+    return GuardrailCheckResponseBody(status="error", rails_status={}, guardrails_data=guardrails_data)
+
+
+def _load_rails(config_id: Optional[str] = None, inline_config: Optional[dict] = None) -> LLMRails:
+    """Load rails from either config_id or inline config."""
+    if inline_config:
+        rails_config = (
+            RailsConfig.from_content(yaml_content=inline_config)
+            if isinstance(inline_config, str)
+            else RailsConfig.from_content(config=inline_config)
+        )
+        return LLMRails(config=rails_config, verbose=True)
+
+    # config_id must be provided if inline_config is not
+    if not config_id:
+        raise ValueError("Either config_id or inline_config must be provided")
+
+    return _get_rails([config_id])
+
+
+def _create_check_options(run_input: bool, run_output: bool) -> GenerationOptions:
+    """Create GenerationOptions for guardrail checks.
+
+    All LLM and rail parameters come from the guardrail configuration.
+    """
+    return GenerationOptions(
+        rails=GenerationRailsOptions(
+            input=run_input,
+            output=run_output,
+            retrieval=False,
+            dialog=False,
+            tool_input=False,
+            tool_output=False,
+        ),
+        log=GenerationLogOptions(activated_rails=True, internal_events=True, llm_calls=True),
+    )
+
+
+def _calculate_status(rails_status: dict) -> str:
+    """Calculate overall status from rails status dictionary."""
+    return "blocked" if any(s.get("status") == "blocked" for s in rails_status.values()) else "success"
+
+
+async def _check_conversation_context(body: GuardrailCheckRequestBody, llm_rails: LLMRails) -> str:
+    """Check all messages together with full conversation context.
+
+    Returns a JSON string of the response.
+    """
+    # Determine which rails to run based on last message role
+    if not body.messages:
+        return json.dumps(_create_error_response("Messages list cannot be empty.").model_dump()) + "\n"
+
+    last_role = body.messages[-1].get("role")
+    if last_role == "user":
+        options = _create_check_options(run_input=True, run_output=False)
+    elif last_role == "assistant":
+        options = _create_check_options(run_input=False, run_output=True)
+    else:
+        return (
+            json.dumps(_create_error_response("Last message must have 'user' or 'assistant' role.").model_dump()) + "\n"
+        )
+
+    # Check entire conversation with context
+    res = await llm_rails.generate_async(messages=body.messages, options=options)
+
+    # Build response from result
+    rails_status = {}
+    activated_rails_set = set()
+    stats = None
+
+    if isinstance(res, GenerationResponse) and res.log:
+        if res.log.activated_rails:
+            for rail in res.log.activated_rails:
+                rails_status[rail.name] = {"status": "blocked" if rail.stop else "success"}
+                activated_rails_set.add(rail.name)
+
+        if res.log.stats:
+            stats = {
+                "input_rails_duration": res.log.stats.input_rails_duration or 0,
+                "output_rails_duration": res.log.stats.output_rails_duration or 0,
+                "total_duration": res.log.stats.total_duration or 0,
+                "llm_calls_duration": res.log.stats.llm_calls_duration or 0,
+                "llm_calls_count": res.log.stats.llm_calls_count or 0,
+                "llm_calls_total_prompt_tokens": res.log.stats.llm_calls_total_prompt_tokens or 0,
+                "llm_calls_total_completion_tokens": res.log.stats.llm_calls_total_completion_tokens or 0,
+                "llm_calls_total_tokens": res.log.stats.llm_calls_total_tokens or 0,
+            }
+
+    guardrails_data = None
+    if activated_rails_set or stats:
+        guardrails_data = {"log": {"activated_rails": list(activated_rails_set), "stats": stats or {}}}
+
+    final_result = GuardrailCheckResponseBody(
+        status=_calculate_status(rails_status),
+        rails_status=rails_status,
+        guardrails_data=guardrails_data,
+    )
+    return json.dumps(final_result.model_dump()) + "\n"
+
+
+@app.post(
+    "/v1/guardrail/checks",
+    response_model=GuardrailCheckResponseBody,
+)
+async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
+    """Check messages against guardrails without generating LLM responses.
+
+    This endpoint runs input/output rails on the provided messages and returns
+    the status of each rail. It does not generate new content, only validates
+    existing messages against configured guardrails.
+    """
+    log.info("Got guardrail check request")
+    for logger in registered_loggers:
+        asyncio.get_event_loop().create_task(
+            logger({"endpoint": "/v1/guardrail/checks", "body": body.model_dump_json()})
+        )
+
+    api_request_headers.set(request.headers)
+
+    async def process_checks():
+        """Process guardrail checks and yield results."""
+        try:
+            # Validate request
+            if not body.messages:
+                yield json.dumps(_create_error_response("Messages list cannot be empty.").model_dump()) + "\n"
+                return
+
+            # Determine which config to use
+            if body.guardrails is not None:
+                config_id = body.guardrails.get("config_id")
+                inline_config = body.guardrails.get("config")
+
+                if config_id and inline_config:
+                    yield (
+                        json.dumps(
+                            _create_error_response(
+                                "Only one of 'config_id' or 'config' should be provided in guardrails field."
+                            ).model_dump()
+                        )
+                        + "\n"
+                    )
+                    return
+                if not (config_id or inline_config):
+                    yield (
+                        json.dumps(
+                            _create_error_response(
+                                "Either 'config_id' or 'config' must be provided in guardrails field."
+                            ).model_dump()
+                        )
+                        + "\n"
+                    )
+                    return
+            else:
+                # Use default config if no guardrails specified
+                config_id = app.default_config_id
+                inline_config = None
+
+                if not config_id:
+                    yield (
+                        json.dumps(
+                            _create_error_response(
+                                "No guardrails configuration provided and no default configuration set on server."
+                            ).model_dump()
+                        )
+                        + "\n"
+                    )
+                    return
+
+            # Load rails configuration
+            try:
+                llm_rails = _load_rails(config_id, inline_config)
+            except Exception as ex:
+                log.exception(ex)
+                error_msg = (
+                    "Could not load guardrails configuration."
+                    if isinstance(ex, ValueError)
+                    else "Failed to load guardrails configuration."
+                )
+                yield json.dumps(_create_error_response(error_msg, str(ex)).model_dump()) + "\n"
+                return
+
+            # Check if conversation context mode is enabled
+            if body.use_conversation_context:
+                # Conversation mode: check all messages together with context
+                yield await _check_conversation_context(body, llm_rails)
+                return
+
+            # Process messages: check each user/assistant message with appropriate rails
+            all_rails_status = {}
+            activated_rails_set = set()
+            all_stats = []
+
+            for msg in body.messages:
+                if not isinstance(msg, dict) or "role" not in msg:
+                    continue
+
+                role = msg.get("role")
+                content = msg.get("content", "")
+
+                # Determine which rails to run
+                if role == "user":
+                    options = _create_check_options(run_input=True, run_output=False)
+                    check_messages = [{"role": "user", "content": content}]
+                elif role == "assistant":
+                    options = _create_check_options(run_input=False, run_output=True)
+                    check_messages = [
+                        {"role": "user", "content": ""},
+                        {"role": "assistant", "content": content},
+                    ]
+                else:
+                    continue
+
+                # Execute guardrail check
+                res = await llm_rails.generate_async(messages=check_messages, options=options)
+
+                # Collect results
+                if isinstance(res, GenerationResponse) and res.log:
+                    if res.log.activated_rails:
+                        for rail in res.log.activated_rails:
+                            # Keep blocked status if already blocked, don't downgrade to success
+                            current_status = "blocked" if rail.stop else "success"
+                            if rail.name not in all_rails_status or current_status == "blocked":
+                                all_rails_status[rail.name] = {"status": current_status}
+                            activated_rails_set.add(rail.name)
+
+                    if res.log.stats:
+                        all_stats.append(res.log.stats)
+
+                # Stream intermediate result if streaming enabled
+                if body.stream:
+                    intermediate_result = {
+                        "status": _calculate_status(all_rails_status),
+                        "rails_status": all_rails_status.copy(),
+                        "guardrails_data": None,
+                    }
+                    yield json.dumps(intermediate_result) + "\n"
+
+            # Build final response
+            guardrails_data = None
+            if all_stats or activated_rails_set:
+                aggregated_stats = {}
+                if all_stats:
+                    fields = [
+                        "input_rails_duration",
+                        "output_rails_duration",
+                        "total_duration",
+                        "llm_calls_duration",
+                        "llm_calls_count",
+                        "llm_calls_total_prompt_tokens",
+                        "llm_calls_total_completion_tokens",
+                        "llm_calls_total_tokens",
+                    ]
+                    aggregated_stats = {
+                        field: sum(getattr(stat, field, 0) or 0 for stat in all_stats) for field in fields
+                    }
+
+                guardrails_data = {"log": {"activated_rails": list(activated_rails_set), "stats": aggregated_stats}}
+
+            final_result = GuardrailCheckResponseBody(
+                status=_calculate_status(all_rails_status),
+                rails_status=all_rails_status,
+                guardrails_data=guardrails_data,
+            )
+            yield json.dumps(final_result.model_dump()) + "\n"
+
+        except Exception as ex:
+            log.exception(ex)
+            yield json.dumps(_create_error_response("Internal server error.", str(ex)).model_dump()) + "\n"
+
+    if body.stream:
+        return StreamingResponse(process_checks(), media_type="application/x-ndjson")
+    else:
+        # Non-streaming: collect all results and return final response
+        results = []
+        async for result in process_checks():
+            results.append(result)
+
+        # Return the last result (final response)
+        if results:
+            return GuardrailCheckResponseBody.model_validate_json(results[-1])
+        else:
+            return _create_error_response("No results generated.")
 
 
 # By default, there are no challenges
