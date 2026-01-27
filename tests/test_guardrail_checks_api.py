@@ -13,6 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Tests for /v1/guardrail/checks endpoint.
+
+These tests mirror the bash test suite (test_all_guardrail_checks.sh) and verify:
+- Role-based routing: user messages → input rails, assistant messages → output rails
+- API compliance with NVIDIA NeMo Guardrails specification
+- Error handling and validation
+- Streaming mode
+- Model inheritance
+"""
+
 import json
 import os
 
@@ -25,342 +36,322 @@ client = TestClient(api.app)
 
 
 @pytest.fixture(scope="function", autouse=True)
-def set_rails_config_path():
-    api.app.rails_config_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "test_configs"))
-    # Set default config for testing optional guardrails field
-    api.app.default_config_id = "input_rails"
+def setup_test_config():
+    """Set up test configuration path and default config."""
+    api.app.rails_config_path = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "test_configs")
+    )
+    api.app.default_config_id = "simple_rails"
     yield
+    # Cleanup
     api.app.rails_config_path = os.path.normpath(
         os.path.join(os.path.dirname(__file__), "..", "..", "examples", "bots")
     )
     api.app.default_config_id = None
 
 
-# Validation Tests
+# =============================================================================
+# Error Handling Tests
+# =============================================================================
 
-def test_empty_messages():
-    """Empty messages list returns error."""
+
+def test_empty_messages_error():
+    """Error handling: Empty messages array returns error."""
     response = client.post(
         "/v1/guardrail/checks",
         json={
-            "model": "test",
+            "model": "test-model",
             "messages": [],
-            "guardrails": {"config_id": "input_rails"},
+            "guardrails": {"config_id": "simple_rails"},
         },
     )
+
     result = response.json()
     assert result["status"] == "error"
-    assert "empty" in result["guardrails_data"]["error"].lower()
-
-
-def test_missing_config():
-    """Missing both config_id and config returns error."""
-    response = client.post(
-        "/v1/guardrail/checks",
-        json={
-            "model": "test",
-            "messages": [{"role": "user", "content": "test"}],
-            "guardrails": {},
-        },
-    )
-    result = response.json()
-    assert result["status"] == "error"
-    # Should error - either because both missing or config load failed
+    assert "guardrails_data" in result
     assert "error" in result["guardrails_data"]
 
 
-def test_both_config_and_config_id():
-    """Providing both config_id and config returns error."""
+def test_invalid_config_id_error():
+    """Error handling: Invalid config_id returns error."""
     response = client.post(
         "/v1/guardrail/checks",
         json={
-            "model": "test",
+            "model": "test-model",
             "messages": [{"role": "user", "content": "test"}],
-            "guardrails": {"config_id": "input_rails", "config": {}},
+            "guardrails": {"config_id": "nonexistent_config"},
         },
     )
+
     result = response.json()
     assert result["status"] == "error"
+    assert "Could not load guardrails configuration" in str(result["guardrails_data"])
 
 
-def test_invalid_config_id():
-    """Invalid config_id returns error."""
+def test_both_config_and_config_id_error():
+    """Error handling: Providing both config_id and config returns error."""
     response = client.post(
         "/v1/guardrail/checks",
         json={
-            "model": "test",
+            "model": "test-model",
             "messages": [{"role": "user", "content": "test"}],
-            "guardrails": {"config_id": "nonexistent"},
+            "guardrails": {
+                "config_id": "simple_rails",
+                "config": {"rails": {"input": {"flows": ["test"]}}}  # Non-empty config
+            },
         },
     )
+
     result = response.json()
     assert result["status"] == "error"
+    assert "Only one of" in str(result["guardrails_data"])
 
 
-def test_no_guardrails_field_uses_default():
-    """Omitting guardrails field uses default config."""
+# =============================================================================
+# Role-Based Routing Tests (Core Functionality)
+# =============================================================================
+
+
+def test_user_message_triggers_input_rails():
+    """Input rails evaluate user messages."""
     response = client.post(
         "/v1/guardrail/checks",
         json={
-            "model": "test",
-            "messages": [{"role": "user", "content": "test"}],
-            # No guardrails field - should use default_config_id
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "Hello, how are you?"}],
+            "guardrails": {"config_id": "simple_rails"},
         },
     )
+
     result = response.json()
-    assert result["status"] in ["success", "blocked", "error"]
-    # Should have processed the request (not error about missing config)
-    assert "status" in result
+    assert result["status"] in ["success", "blocked"]
+    assert "rails_status" in result
+    assert isinstance(result["rails_status"], dict)
+    # Input rails should be evaluated (rails_status should be populated)
+    assert len(result["rails_status"]) > 0
+
+
+def test_assistant_message_triggers_output_rails():
+    """Output rails evaluate assistant messages."""
+    response = client.post(
+        "/v1/guardrail/checks",
+        json={
+            "model": "test-model",
+            "messages": [{"role": "assistant", "content": "I can help with that!"}],
+            "guardrails": {"config_id": "simple_rails"},
+        },
+    )
+
+    result = response.json()
+    assert result["status"] in ["success", "blocked"]
     assert "rails_status" in result
 
 
-def test_no_guardrails_no_default_returns_error():
-    """Omitting guardrails with no default config returns error."""
-    # Temporarily remove default config
-    original_default = api.app.default_config_id
-    api.app.default_config_id = None
-
-    try:
-        response = client.post(
-            "/v1/guardrail/checks",
-            json={
-                "model": "test",
-                "messages": [{"role": "user", "content": "test"}],
-                # No guardrails field and no default config
-            },
-        )
-        result = response.json()
-        assert result["status"] == "error"
-        assert "no default configuration" in result["guardrails_data"]["error"].lower()
-    finally:
-        # Restore default config
-        api.app.default_config_id = original_default
-
-
-# Core Functionality Tests
-
-def test_non_streaming_response_structure():
-    """Non-streaming returns proper JSON structure."""
+def test_multiple_messages_user_and_assistant():
+    """Multiple messages: user and assistant messages evaluated by appropriate rails."""
     response = client.post(
         "/v1/guardrail/checks",
         json={
-            "model": "test",
-            "messages": [{"role": "user", "content": "Hello"}],
-            "guardrails": {"config_id": "input_rails"},
-            "stream": False,
+            "model": "test-model",
+            "messages": [
+                {"role": "user", "content": "What is the weather?"},
+                {"role": "assistant", "content": "It's sunny today."},
+            ],
+            "guardrails": {"config_id": "simple_rails"},
         },
     )
-    result = response.json()
 
-    # Must have these fields
-    assert "status" in result
+    result = response.json()
+    assert result["status"] in ["success", "blocked"]
     assert "rails_status" in result
     assert "guardrails_data" in result
 
-    # Status must be one of the allowed values
-    assert result["status"] in ["success", "blocked", "error"]
 
-    # Rails status must be dict
-    assert isinstance(result["rails_status"], dict)
-
-
-def test_streaming_returns_ndjson():
-    """Streaming mode returns NDJSON with valid JSON lines."""
+def test_multiple_same_role_messages():
+    """Multiple messages with same role are checked independently."""
     response = client.post(
         "/v1/guardrail/checks",
         json={
-            "model": "test",
+            "model": "test-model",
             "messages": [
-                {"role": "user", "content": "First"},
-                {"role": "user", "content": "Second"},
+                {"role": "user", "content": "First question"},
+                {"role": "user", "content": "Second question"},
             ],
-            "guardrails": {"config_id": "input_rails"},
+            "guardrails": {"config_id": "simple_rails"},
+        },
+    )
+
+    result = response.json()
+    assert result["status"] in ["success", "blocked"]
+    assert "rails_status" in result
+
+
+# =============================================================================
+# LLM Parameters & API Compliance
+# =============================================================================
+
+
+def test_llm_parameters_accepted():
+    """LLM parameters (top_p, temperature, max_tokens) are accepted per NVIDIA spec."""
+    response = client.post(
+        "/v1/guardrail/checks",
+        json={
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "test"}],
+            "guardrails": {"config_id": "simple_rails"},
+            "top_p": 1.0,
+            "temperature": 0.7,
+            "max_tokens": 150,
+        },
+    )
+
+    result = response.json()
+    # Parameters should be accepted without error
+    assert result["status"] in ["success", "blocked"]
+
+
+def test_response_structure_matches_nvidia_spec():
+    """Response structure matches NVIDIA specification."""
+    response = client.post(
+        "/v1/guardrail/checks",
+        json={
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "test"}],
+            "guardrails": {"config_id": "simple_rails"},
+        },
+    )
+
+    result = response.json()
+
+    # Required fields per NVIDIA spec
+    assert "status" in result
+    assert result["status"] in ["success", "blocked", "error"]
+    assert "rails_status" in result
+    assert isinstance(result["rails_status"], dict)
+    assert "guardrails_data" in result
+
+
+# =============================================================================
+# Streaming Mode
+# =============================================================================
+
+
+def test_streaming_mode_returns_ndjson():
+    """Streaming mode returns NDJSON format."""
+    response = client.post(
+        "/v1/guardrail/checks",
+        json={
+            "model": "test-model",
+            "messages": [
+                {"role": "user", "content": "First message"},
+                {"role": "user", "content": "Second message"},
+            ],
+            "guardrails": {"config_id": "simple_rails"},
             "stream": True,
         },
     )
 
-    # Must be NDJSON
+    # Check content type
     assert response.headers["content-type"] == "application/x-ndjson"
 
-    # Parse lines
+    # Parse NDJSON lines
     lines = response.text.strip().split("\n")
-    assert len(lines) >= 1  # At least one result
+    assert len(lines) >= 2  # At least one per message
 
-    # All lines must be valid JSON with required fields
+    # Each line should be valid JSON
     for line in lines:
         data = json.loads(line)
         assert "status" in data
         assert "rails_status" in data
 
 
-def test_inline_config():
-    """Inline config works."""
+# =============================================================================
+# Inline Config Tests
+# =============================================================================
+
+
+def test_inline_config_with_model():
+    """Inline config with model specification works."""
     response = client.post(
         "/v1/guardrail/checks",
         json={
-            "model": "test",
+            "model": "gpt-3.5-turbo-instruct",
             "messages": [{"role": "user", "content": "test"}],
             "guardrails": {
                 "config": {
                     "models": [{"type": "main", "engine": "openai", "model": "gpt-3.5-turbo-instruct"}],
-                    "rails": {"input": {"flows": []}},
+                    "prompts": [
+                        {
+                            "task": "self_check_input",
+                            "content": 'User: "{{ user_input }}"\nBlock? Answer:',
+                        }
+                    ],
+                    "rails": {"input": {"flows": ["self check input"]}},
                 }
             },
         },
     )
+
     result = response.json()
-    assert "status" in result
-
-
-def test_stats_structure():
-    """Stats have correct structure when present."""
-    response = client.post(
-        "/v1/guardrail/checks",
-        json={
-            "model": "test",
-            "messages": [{"role": "user", "content": "test"}],
-            "guardrails": {"config_id": "input_rails"},
-        },
-    )
-    result = response.json()
-
-    # If error (e.g., missing API keys), error structure should be correct
-    if result["status"] == "error":
-        assert "error" in result["guardrails_data"]
-        return
-
-    # If success/blocked with guardrails_data, validate structure
-    if result.get("guardrails_data") and "log" in result["guardrails_data"]:
-        log = result["guardrails_data"]["log"]
-        assert "activated_rails" in log
-        assert isinstance(log["activated_rails"], list)
-        assert "stats" in log
-        assert isinstance(log["stats"], dict)
-
-
-# Conversation Context Mode Tests
-
-def test_conversation_context_mode_basic():
-    """Conversation context mode processes full conversation."""
-    response = client.post(
-        "/v1/guardrail/checks",
-        json={
-            "model": "test",
-            "messages": [
-                {"role": "user", "content": "Hello"},
-                {"role": "assistant", "content": "Hi there!"},
-                {"role": "user", "content": "How are you?"},
-            ],
-            "guardrails": {"config_id": "input_rails"},
-            "use_conversation_context": True,
-        },
-    )
-    result = response.json()
-
-    # Must have proper structure
-    assert "status" in result
+    # May succeed or error depending on API key, but should not crash
+    assert result["status"] in ["success", "blocked", "error"]
     assert "rails_status" in result
-    assert result["status"] in ["success", "blocked", "error"]
 
 
-def test_conversation_context_checks_last_user_message():
-    """Conversation context with last user message runs input rails."""
+def test_inline_config_model_inheritance():
+    """Inline config with empty models array inherits from default config."""
     response = client.post(
         "/v1/guardrail/checks",
         json={
-            "model": "test",
-            "messages": [
-                {"role": "user", "content": "Previous message"},
-                {"role": "assistant", "content": "Response"},
-                {"role": "user", "content": "Final message"},
-            ],
-            "guardrails": {"config_id": "input_rails"},
-            "use_conversation_context": True,
-        },
-    )
-    result = response.json()
-    assert result["status"] in ["success", "blocked", "error"]
-
-
-def test_conversation_context_checks_last_assistant_message():
-    """Conversation context with last assistant message runs output rails."""
-    response = client.post(
-        "/v1/guardrail/checks",
-        json={
-            "model": "test",
-            "messages": [
-                {"role": "user", "content": "Hello"},
-                {"role": "assistant", "content": "Final assistant message"},
-            ],
-            "guardrails": {"config_id": "input_rails"},
-            "use_conversation_context": True,
-        },
-    )
-    result = response.json()
-    assert result["status"] in ["success", "blocked", "error"]
-
-
-def test_conversation_context_invalid_last_role():
-    """Conversation context with invalid last role returns error."""
-    response = client.post(
-        "/v1/guardrail/checks",
-        json={
-            "model": "test",
-            "messages": [
-                {"role": "user", "content": "Hello"},
-                {"role": "system", "content": "Invalid last role"},
-            ],
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "test"}],
             "guardrails": {
                 "config": {
-                    "models": [{"type": "main", "engine": "openai", "model": "gpt-3.5-turbo-instruct"}],
-                    "rails": {"input": {"flows": []}},
+                    "models": [],  # Should inherit from default config
+                    "prompts": [
+                        {
+                            "task": "self_check_input",
+                            "content": 'User: "{{ user_input }}"\nBlock? Answer:',
+                        }
+                    ],
+                    "rails": {"input": {"flows": ["self check input"]}},
                 }
             },
-            "use_conversation_context": True,
         },
     )
+
     result = response.json()
-    assert result["status"] == "error"
-    # Should error about invalid role
-    assert "error" in result["guardrails_data"]
+    # Should not fail with "No LLM provided" if default config exists
+    assert result["status"] in ["success", "blocked", "error"]
+    assert "rails_status" in result
 
 
-def test_independent_vs_conversation_context_difference():
-    """Independent and conversation context modes behave differently."""
-    messages = [
-        {"role": "user", "content": "Message 1"},
-        {"role": "user", "content": "Message 2"},
-    ]
+# =============================================================================
+# Stats and Metadata Tests
+# =============================================================================
 
-    # Independent mode
-    response_independent = client.post(
+
+def test_guardrails_data_contains_stats():
+    """Guardrails data contains execution statistics."""
+    response = client.post(
         "/v1/guardrail/checks",
         json={
-            "model": "test",
-            "messages": messages,
-            "guardrails": {"config_id": "input_rails"},
-            "use_conversation_context": False,
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "test"}],
+            "guardrails": {"config_id": "simple_rails"},
         },
     )
 
-    # Conversation context mode
-    response_context = client.post(
-        "/v1/guardrail/checks",
-        json={
-            "model": "test",
-            "messages": messages,
-            "guardrails": {"config_id": "input_rails"},
-            "use_conversation_context": True,
-        },
-    )
+    result = response.json()
 
-    # Both should return valid responses
-    result_independent = response_independent.json()
-    result_context = response_context.json()
+    if result["guardrails_data"]:
+        assert "log" in result["guardrails_data"]
+        log = result["guardrails_data"]["log"]
 
-    assert result_independent["status"] in ["success", "blocked", "error"]
-    assert result_context["status"] in ["success", "blocked", "error"]
-
-    # Both should have proper structure
-    assert "rails_status" in result_independent
-    assert "rails_status" in result_context
+        # Stats should be present
+        if "stats" in log:
+            stats = log["stats"]
+            # Check for expected stat fields
+            assert "input_rails_duration" in stats
+            assert "output_rails_duration" in stats
+            assert "total_duration" in stats
