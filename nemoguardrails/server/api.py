@@ -281,7 +281,8 @@ class GuardrailCheckRequestBody(BaseModel):
     )
     messages: List[dict] = Field(
         description="The list of messages to check against guardrails. "
-        "Each message should have 'role' (user/assistant) and 'content' fields."
+        "Each message should have 'role' (user/assistant/tool) and 'content' fields. "
+        "Tool messages should also include 'name' and optionally 'tool_call_id'."
     )
     guardrails: Optional[dict] = Field(
         default=None,
@@ -307,6 +308,17 @@ class GuardrailCheckRequestBody(BaseModel):
     )
 
 
+class MessageCheckResult(BaseModel):
+    """Per-message guardrail check result."""
+
+    index: int = Field(description="Index of the message in the request.")
+    role: str = Field(description="Role of the message (user/assistant/tool).")
+    rails: Dict[str, dict] = Field(
+        default_factory=dict,
+        description="Rails that were evaluated for this message and their statuses.",
+    )
+
+
 class GuardrailCheckResponseBody(BaseModel):
     """Response body for the /v1/guardrail/checks endpoint."""
 
@@ -315,7 +327,11 @@ class GuardrailCheckResponseBody(BaseModel):
     )
     rails_status: Dict[str, dict] = Field(
         default_factory=dict,
-        description="Status of each individual rail that was executed.",
+        description="Status of each individual rail that was executed (aggregated across all messages).",
+    )
+    messages: List[MessageCheckResult] = Field(
+        default_factory=list,
+        description="Per-message guardrail check results showing which rails were evaluated for each message.",
     )
     guardrails_data: Optional[dict] = Field(default=None, description="Additional data from guardrail execution.")
 
@@ -597,7 +613,12 @@ def _load_rails(
     return _get_rails([config_id])
 
 
-def _create_check_options(run_input: bool, run_output: bool) -> GenerationOptions:
+def _create_check_options(
+    run_input: bool = False,
+    run_output: bool = False,
+    run_tool_input: bool = False,
+    run_tool_output: bool = False,
+) -> GenerationOptions:
     """Create GenerationOptions for guardrail checks.
 
     All LLM and rail parameters come from the guardrail configuration.
@@ -608,8 +629,8 @@ def _create_check_options(run_input: bool, run_output: bool) -> GenerationOption
             output=run_output,
             retrieval=False,
             dialog=False,
-            tool_input=False,
-            tool_output=False,
+            tool_input=run_tool_input,
+            tool_output=run_tool_output,
         ),
         log=GenerationLogOptions(activated_rails=True, internal_events=True, llm_calls=True),
     )
@@ -648,6 +669,7 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
     This endpoint validates messages against configured guardrails using role-based routing:
     - user messages: evaluated by input rails
     - assistant messages: evaluated by output rails
+    - tool messages: evaluated by tool_input rails
 
     Args:
         body: Request containing messages and guardrail configuration
@@ -670,6 +692,7 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
         Messages are checked independently based on role:
         - user messages: input rails
         - assistant messages: output rails
+        - tool messages: tool_input rails
         """
         try:
             # Validate messages
@@ -734,39 +757,165 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
             rails_status = {}
             activated_rails = set()
             stats_list = []
+            message_results = []
 
-            for msg in body.messages:
+            for msg_idx, msg in enumerate(body.messages):
                 if not isinstance(msg, dict) or "role" not in msg:
                     continue
 
                 role = msg.get("role")
                 content = msg.get("content", "")
+                log.info(f"Processing message with role: {role}")
+
+                # Track per-message rails
+                message_rails = {}
 
                 if role == "user":
-                    options = _create_check_options(run_input=True, run_output=False)
+                    options = _create_check_options(run_input=True)
                     check_messages = [{"role": "user", "content": content}]
                 elif role == "assistant":
-                    options = _create_check_options(run_input=False, run_output=True)
-                    check_messages = [
-                        {"role": "user", "content": ""},
-                        {"role": "assistant", "content": content},
-                    ]
+                    # Check if this is a tool call (tool_output rails) or regular output (output rails)
+                    if "tool_calls" in msg:
+                        # Tool output rails - validate tool calls before execution
+                        # For tool_output, we need to use events directly, not messages
+                        # Convert OpenAI-style tool_calls to NeMo format
+                        from nemoguardrails.utils import new_event_dict
+
+                        nemo_tool_calls = []
+                        for tc in msg["tool_calls"]:
+                            # Handle both OpenAI format and NeMo format
+                            if "function" in tc:
+                                # OpenAI format
+                                tool_call = {
+                                    "id": tc.get("id", ""),
+                                    "name": tc["function"]["name"],
+                                    "args": json.loads(tc["function"]["arguments"]) if isinstance(tc["function"]["arguments"], str) else tc["function"]["arguments"],
+                                    "type": "tool_call"
+                                }
+                            else:
+                                # Already in NeMo format
+                                tool_call = tc
+                            nemo_tool_calls.append(tool_call)
+
+                        # Create BotToolCalls event
+                        events = [new_event_dict("BotToolCalls", tool_calls=nemo_tool_calls)]
+                        result_events = await llm_rails.runtime.generate_events(events)
+
+                        # Check if rails blocked (look for bot message in events)
+                        blocked_message = None
+                        for event in result_events:
+                            if event.get("type") == "StartUtteranceBotAction":
+                                blocked_message = event.get("script")
+                                break
+
+                        # Create a GenerationResponse-like object for consistent handling below
+                        if blocked_message:
+                            result = type('obj', (object,), {
+                                'response': [{"role": "assistant", "content": blocked_message}],
+                                'log': type('obj', (object,), {
+                                    'activated_rails': [type('obj', (object,), {
+                                        'name': 'check tool call safety',
+                                        'stop': True,
+                                        'type': 'tool_output'
+                                    })()],
+                                    'stats': None
+                                })()
+                            })()
+                        else:
+                            result = type('obj', (object,), {
+                                'response': [],
+                                'log': type('obj', (object,), {
+                                    'activated_rails': [],
+                                    'stats': None
+                                })()
+                            })()
+
+                        # Skip the generate_async call below for tool_output
+                        check_messages = None
+                    else:
+                        # Regular output rails - validate assistant responses
+                        options = _create_check_options(run_output=True)
+                        check_messages = [
+                            {"role": "user", "content": ""},
+                            {"role": "assistant", "content": content},
+                        ]
+                elif role == "tool":
+                    # Tool messages trigger tool_input rails
+                    # With the fix to llmrails.py, we can now send tool messages directly
+                    # without requiring synthetic user/assistant context
+                    options = _create_check_options(run_tool_input=True, run_tool_output=True)
+
+                    tool_msg = {
+                        "role": "tool",
+                        "content": content,
+                    }
+                    # Include tool name if present (required for tool messages)
+                    if "name" in msg:
+                        tool_msg["name"] = msg["name"]
+                    # Include tool_call_id if present (recommended but optional)
+                    if "tool_call_id" in msg:
+                        tool_msg["tool_call_id"] = msg["tool_call_id"]
+
+                    check_messages = [tool_msg]
                 else:
                     continue
 
-                result = await llm_rails.generate_async(messages=check_messages, options=options)
+                # For tool_output rails, we already have the result from generate_events
+                if check_messages is not None:
+                    result = await llm_rails.generate_async(messages=check_messages, options=options)
 
-                if isinstance(result, GenerationResponse) and result.log:
-                    if result.log.activated_rails:
+                # Handle result from both generate_async (GenerationResponse) and generate_events (custom object)
+                if hasattr(result, 'log') and result.log:
+                    # For tool_input rails: check if a bot response was generated (indicates blocking)
+                    # Tool_input rails only generate responses when they abort/block
+                    tool_input_blocked = (
+                        role == "tool" and
+                        hasattr(result, 'response') and
+                        result.response and
+                        len(result.response) > 0 and
+                        result.response[0].get('content', '').strip() != ''
+                    )
+
+                    # For tool_output rails: check if we got a blocking message
+                    tool_output_blocked = (
+                        role == "assistant" and
+                        "tool_calls" in msg and
+                        hasattr(result, 'response') and
+                        result.response and
+                        len(result.response) > 0
+                    )
+
+                    if hasattr(result.log, 'activated_rails') and result.log.activated_rails:
                         for rail in result.log.activated_rails:
-                            status = "blocked" if rail.stop else "success"
-                            if rail.name not in rails_status or status == "blocked":
-                                rails_status[rail.name] = {"status": status}
-                            if rail.stop:
-                                activated_rails.add(rail.name)
+                            # Check if rail blocked execution
+                            # Note: tool_input rails use abort which doesn't set stop=True (NeMo bug)
+                            # For tool_input rails, we detect blocking by checking if a bot response was generated
+                            # For tool_output rails, we detect blocking from our custom result object
+                            is_blocked = (
+                                getattr(rail, 'stop', False) or
+                                (tool_input_blocked and getattr(rail, 'type', '') in ["dialog", "tool_input"]) or
+                                (tool_output_blocked and getattr(rail, 'type', '') == "tool_output")
+                            )
 
-                    if result.log.stats:
+                            status = "blocked" if is_blocked else "success"
+                            rail_name = getattr(rail, 'name', 'unknown')
+
+                            # Update aggregated rails_status
+                            if rail_name not in rails_status or status == "blocked":
+                                rails_status[rail_name] = {"status": status}
+                            if is_blocked:
+                                activated_rails.add(rail_name)
+
+                            # Track per-message rail status
+                            message_rails[rail_name] = {"status": status}
+
+                    if hasattr(result.log, 'stats') and result.log.stats:
                         stats_list.append(result.log.stats)
+
+                # Add message result
+                message_results.append(
+                    MessageCheckResult(index=msg_idx, role=role, rails=message_rails)
+                )
 
                 # Stream intermediate results
                 if body.stream:
@@ -794,6 +943,7 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
             final_result = GuardrailCheckResponseBody(
                 status=_calculate_status(rails_status),
                 rails_status=rails_status,
+                messages=message_results,
                 guardrails_data=guardrails_data,
             )
             yield json.dumps(final_result.model_dump()) + "\n"

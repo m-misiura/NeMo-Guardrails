@@ -681,7 +681,9 @@ class LLMRails:
                                 user_message = prev_msg["content"]
                                 break
 
-                        if user_message:
+                        # If tool input rails are configured, process tool messages even without user message
+                        # This allows standalone tool message validation (e.g., in MCP gateway scenarios)
+                        if user_message or self.config.rails.tool_input.flows:
                             # If tool input rails are configured, group all tool messages
                             if self.config.rails.tool_input.flows:
                                 # Collect all tool messages for grouped processing
