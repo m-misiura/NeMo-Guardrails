@@ -32,11 +32,13 @@ from starlette.staticfiles import StaticFiles
 
 from nemoguardrails import LLMRails, RailsConfig, utils
 from nemoguardrails.rails.llm.options import (
+    ActivatedRail,
     GenerationLog,
     GenerationLogOptions,
     GenerationOptions,
     GenerationRailsOptions,
     GenerationResponse,
+    GenerationStats,
 )
 from nemoguardrails.server.datastore.datastore import DataStore
 from nemoguardrails.streaming import StreamingHandler
@@ -755,9 +757,10 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
                 return
 
             rails_status = {}
-            activated_rails = set()
-            stats_list = []
             message_results = []
+
+            # Use NeMo's GenerationLog for accumulation instead of manual tracking
+            aggregated_log = GenerationLog(activated_rails=[], stats=GenerationStats())
 
             for msg_idx, msg in enumerate(body.messages):
                 if not isinstance(msg, dict) or "role" not in msg:
@@ -789,8 +792,12 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
                                 tool_call = {
                                     "id": tc.get("id", ""),
                                     "name": tc["function"]["name"],
-                                    "args": json.loads(tc["function"]["arguments"]) if isinstance(tc["function"]["arguments"], str) else tc["function"]["arguments"],
-                                    "type": "tool_call"
+                                    "args": (
+                                        json.loads(tc["function"]["arguments"])
+                                        if isinstance(tc["function"]["arguments"], str)
+                                        else tc["function"]["arguments"]
+                                    ),
+                                    "type": "tool_call",
                                 }
                             else:
                                 # Already in NeMo format
@@ -801,6 +808,14 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
                         events = [new_event_dict("BotToolCalls", tool_calls=nemo_tool_calls)]
                         result_events = await llm_rails.runtime.generate_events(events)
 
+                        # Extract which rails actually ran by looking for StartToolOutputRail events
+                        activated_rail_names = []
+                        for event in result_events:
+                            if event.get("type") == "StartToolOutputRail":
+                                rail_name = event.get("flow_id")
+                                if rail_name:
+                                    activated_rail_names.append(rail_name)
+
                         # Check if rails blocked (look for bot message in events)
                         blocked_message = None
                         for event in result_events:
@@ -808,27 +823,33 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
                                 blocked_message = event.get("script")
                                 break
 
+                        # Create ActivatedRail objects
+                        rail_objects = [
+                            ActivatedRail(
+                                type="tool_output",
+                                name=rail_name,
+                                stop=(blocked_message is not None),  # Blocked if message generated
+                                decisions=[],
+                                executed_actions=[],
+                            )
+                            for rail_name in activated_rail_names
+                        ]
+
                         # Create a GenerationResponse-like object for consistent handling below
-                        if blocked_message:
-                            result = type('obj', (object,), {
-                                'response': [{"role": "assistant", "content": blocked_message}],
-                                'log': type('obj', (object,), {
-                                    'activated_rails': [type('obj', (object,), {
-                                        'name': 'check tool call safety',
-                                        'stop': True,
-                                        'type': 'tool_output'
-                                    })()],
-                                    'stats': None
-                                })()
-                            })()
-                        else:
-                            result = type('obj', (object,), {
-                                'response': [],
-                                'log': type('obj', (object,), {
-                                    'activated_rails': [],
-                                    'stats': None
-                                })()
-                            })()
+                        result = type(
+                            "obj",
+                            (object,),
+                            {
+                                "response": (
+                                    [{"role": "assistant", "content": blocked_message}] if blocked_message else []
+                                ),
+                                "log": type(
+                                    "obj",
+                                    (object,),
+                                    {"activated_rails": rail_objects, "stats": None},
+                                )(),
+                            },
+                        )()
 
                         # Skip the generate_async call below for tool_output
                         check_messages = None
@@ -840,10 +861,8 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
                             {"role": "assistant", "content": content},
                         ]
                 elif role == "tool":
-                    # Tool messages trigger tool_input rails
-                    # With the fix to llmrails.py, we can now send tool messages directly
-                    # without requiring synthetic user/assistant context
-                    options = _create_check_options(run_tool_input=True, run_tool_output=True)
+                    # Tool messages trigger tool_input rails (validate tool responses)
+                    options = _create_check_options(run_tool_input=True, run_tool_output=False)
 
                     tool_msg = {
                         "role": "tool",
@@ -865,57 +884,62 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
                     result = await llm_rails.generate_async(messages=check_messages, options=options)
 
                 # Handle result from both generate_async (GenerationResponse) and generate_events (custom object)
-                if hasattr(result, 'log') and result.log:
+                if hasattr(result, "log") and result.log:
                     # For tool_input rails: check if a bot response was generated (indicates blocking)
                     # Tool_input rails only generate responses when they abort/block
                     tool_input_blocked = (
-                        role == "tool" and
-                        hasattr(result, 'response') and
-                        result.response and
-                        len(result.response) > 0 and
-                        result.response[0].get('content', '').strip() != ''
+                        role == "tool"
+                        and hasattr(result, "response")
+                        and result.response
+                        and len(result.response) > 0
+                        and result.response[0].get("content", "").strip() != ""
                     )
 
                     # For tool_output rails: check if we got a blocking message
                     tool_output_blocked = (
-                        role == "assistant" and
-                        "tool_calls" in msg and
-                        hasattr(result, 'response') and
-                        result.response and
-                        len(result.response) > 0
+                        role == "assistant"
+                        and "tool_calls" in msg
+                        and hasattr(result, "response")
+                        and result.response
+                        and len(result.response) > 0
                     )
 
-                    if hasattr(result.log, 'activated_rails') and result.log.activated_rails:
+                    if hasattr(result.log, "activated_rails") and result.log.activated_rails:
                         for rail in result.log.activated_rails:
                             # Check if rail blocked execution
                             # Note: tool_input rails use abort which doesn't set stop=True (NeMo bug)
                             # For tool_input rails, we detect blocking by checking if a bot response was generated
                             # For tool_output rails, we detect blocking from our custom result object
                             is_blocked = (
-                                getattr(rail, 'stop', False) or
-                                (tool_input_blocked and getattr(rail, 'type', '') in ["dialog", "tool_input"]) or
-                                (tool_output_blocked and getattr(rail, 'type', '') == "tool_output")
+                                getattr(rail, "stop", False)
+                                or (tool_input_blocked and getattr(rail, "type", "") in ["dialog", "tool_input"])
+                                or (tool_output_blocked and getattr(rail, "type", "") == "tool_output")
                             )
 
                             status = "blocked" if is_blocked else "success"
-                            rail_name = getattr(rail, 'name', 'unknown')
+                            rail_name = getattr(rail, "name", "unknown")
 
                             # Update aggregated rails_status
                             if rail_name not in rails_status or status == "blocked":
                                 rails_status[rail_name] = {"status": status}
-                            if is_blocked:
-                                activated_rails.add(rail_name)
 
                             # Track per-message rail status
                             message_rails[rail_name] = {"status": status}
 
-                    if hasattr(result.log, 'stats') and result.log.stats:
-                        stats_list.append(result.log.stats)
+                            # Add to aggregated log (full ActivatedRail object)
+                            aggregated_log.activated_rails.append(rail)
+
+                    if hasattr(result.log, "stats") and result.log.stats:
+                        # Merge stats using Pydantic's model_dump for robustness
+                        # This automatically handles all GenerationStats fields (current and future)
+                        new_stats_dict = result.log.stats.model_dump()
+                        for field_name, new_value in new_stats_dict.items():
+                            if new_value is not None and isinstance(new_value, (int, float)):
+                                current_value = getattr(aggregated_log.stats, field_name) or 0
+                                setattr(aggregated_log.stats, field_name, current_value + new_value)
 
                 # Add message result
-                message_results.append(
-                    MessageCheckResult(index=msg_idx, role=role, rails=message_rails)
-                )
+                message_results.append(MessageCheckResult(index=msg_idx, role=role, rails=message_rails))
 
                 # Stream intermediate results
                 if body.stream:
@@ -930,15 +954,16 @@ async def guardrail_checks(body: GuardrailCheckRequestBody, request: Request):
                         + "\n"
                     )
 
-            # Build final response
-            guardrails_data = None
-            if stats_list or activated_rails:
-                guardrails_data = {
-                    "log": {
-                        "activated_rails": list(activated_rails),
-                        "stats": _build_stats_dict(stats_list),
-                    }
+            # Build final response using aggregated GenerationLog
+            # Always include guardrails_data for consistency (even if nothing blocked)
+            guardrails_data = {
+                "log": {
+                    # Only include names of rails that blocked (for backward compatibility)
+                    "activated_rails": [rail.name for rail in aggregated_log.activated_rails if rail.stop],
+                    # Serialize stats to dict
+                    "stats": aggregated_log.stats.model_dump() if aggregated_log.stats else {},
                 }
+            }
 
             final_result = GuardrailCheckResponseBody(
                 status=_calculate_status(rails_status),
