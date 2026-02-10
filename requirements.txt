@@ -403,10 +403,6 @@ tokenizers==0.22.1
     # via
     #   fastembed
     #   transformers
-torch==2.9.0
-    # via
-    #   nemoguardrails (pyproject.toml)
-    #   sentence-transformers
 tqdm==4.67.1
     # via
     #   fastembed
