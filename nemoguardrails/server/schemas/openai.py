@@ -108,6 +108,10 @@ class GuardrailsDataInput(BaseModel):
         description="List of configuration IDs to combine.",
         validate_default=True,
     )
+    config: Optional[dict] = Field(
+        default=None,
+        description="Inline guardrails configuration to use instead of config_id.",
+    )
     thread_id: Optional[str] = Field(
         default=None,
         min_length=16,
@@ -131,8 +135,10 @@ class GuardrailsDataInput(BaseModel):
     @classmethod
     def validate_config_ids(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            if data.get("config_id") is not None and data.get("config_ids") is not None:
-                raise ValueError("Only one of config_id or config_ids should be specified")
+            config_fields = [data.get("config_id"), data.get("config_ids"), data.get("config")]
+            non_none_count = sum(1 for field in config_fields if field is not None)
+            if non_none_count > 1:
+                raise ValueError("Only one of config, config_id, or config_ids should be specified")
         return data
 
     @field_validator("config_ids", mode="before")

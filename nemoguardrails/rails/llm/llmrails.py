@@ -370,7 +370,8 @@ class LLMRails:
         Returns:
             dict: The prepared kwargs for model initialization
         """
-        kwargs = model_config.parameters or {}
+        # Make a copy to avoid modifying the original model config
+        kwargs = dict(model_config.parameters) if model_config.parameters else {}
 
         # If the optional API Key Environment Variable is set, add it to kwargs
         if model_config.api_key_env_var:
@@ -378,9 +379,11 @@ class LLMRails:
             if api_key:
                 kwargs["api_key"] = api_key
 
-        # enable streaming token usage
-        # providers that don't support this parameter will simply ignore it
-        kwargs["stream_usage"] = True
+        # Enable streaming token usage by default for providers that support it
+        # However, respect explicit stream_usage setting if provided (some OpenAI-compatible
+        # endpoints don't support this parameter and will error if it's enabled)
+        if "stream_usage" not in kwargs:
+            kwargs["stream_usage"] = True
 
         return kwargs
 
@@ -654,7 +657,9 @@ class LLMRails:
                                 user_message = prev_msg["content"]
                                 break
 
-                        if user_message:
+                        # If tool input rails are configured, process tool messages even without user message
+                        # This allows standalone tool message validation (e.g., in MCP gateway scenarios)
+                        if user_message or self.config.rails.tool_input.flows:
                             # If tool input rails are configured, group all tool messages
                             if self.config.rails.tool_input.flows:
                                 # Collect all tool messages for grouped processing
