@@ -379,11 +379,8 @@ class LLMRails:
             if api_key:
                 kwargs["api_key"] = api_key
 
-        # Enable streaming token usage by default for providers that support it
-        # However, respect explicit stream_usage setting if provided (some OpenAI-compatible
-        # endpoints don't support this parameter and will error if it's enabled)
-        if "stream_usage" not in kwargs:
-            kwargs["stream_usage"] = True
+        # Note: stream_usage is removed in langchain_initializer.py for compatibility
+        # with OpenAI-compatible providers that don't support this parameter
 
         return kwargs
 
