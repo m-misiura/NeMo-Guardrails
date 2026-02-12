@@ -215,6 +215,8 @@ def _init_chat_completion_model(model_name: str, provider_name: str, kwargs: Dic
             "this feature is supported from v0.2.7 of langchain-core."
             " Please upgrade it with `pip install langchain-core --upgrade`."
         )
+    # Remove stream_usage - many OpenAI-compatible providers don't accept this parameter
+    kwargs.pop("stream_usage", None)
     try:
         return init_chat_model(
             model=model_name,
@@ -275,6 +277,8 @@ def _init_community_chat_models(model_name: str, provider_name: str, kwargs: Dic
         return None
 
     kwargs = _update_model_kwargs(provider_cls, model_name, kwargs)
+    # Remove stream_usage - many OpenAI-compatible providers don't accept this parameter
+    kwargs.pop("stream_usage", None)
     return provider_cls(**kwargs)
 
 

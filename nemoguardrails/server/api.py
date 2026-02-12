@@ -15,6 +15,7 @@
 
 import asyncio
 import contextvars
+import copy
 import importlib.util
 import json
 import logging
@@ -23,6 +24,7 @@ import re
 import time
 import uuid
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Dict, List, Literal, Optional, Union
 
 from fastapi import FastAPI, HTTPException, Request
@@ -36,16 +38,21 @@ from starlette.staticfiles import StaticFiles
 from nemoguardrails import LLMRails, RailsConfig, utils
 from nemoguardrails.rails.llm.config import Model
 from nemoguardrails.rails.llm.options import (
+    ActivatedRail,
     GenerationLog,
     GenerationLogOptions,
     GenerationOptions,
     GenerationRailsOptions,
     GenerationResponse,
+    GenerationStats,
 )
 from nemoguardrails.server.datastore.datastore import DataStore
 from nemoguardrails.server.schemas.openai import (
+    GuardrailCheckResponse,
     GuardrailsChatCompletion,
     GuardrailsChatCompletionRequest,
+    MessageCheckResult,
+    RailStatus,
 )
 from nemoguardrails.server.schemas.utils import (
     create_error_chat_completion,
@@ -103,9 +110,9 @@ async def lifespan(app: GuardrailsApp):
 
     # If there is a `config.yml` in the root `app.rails_config_path`, then
     # that means we are in single config mode.
-    if os.path.exists(os.path.join(app.rails_config_path, "config.yml")) or os.path.exists(
-        os.path.join(app.rails_config_path, "config.yaml")
-    ):
+    if os.path.exists(
+        os.path.join(app.rails_config_path, "config.yml")
+    ) or os.path.exists(os.path.join(app.rails_config_path, "config.yaml")):
         app.single_config_mode = True
         app.single_config_id = os.path.basename(app.rails_config_path)
     else:
@@ -325,14 +332,20 @@ def _get_rails(config_ids: List[str], model_name: Optional[str] = None) -> LLMRa
         if base_url:
             parameters["base_url"] = base_url
 
-        main_model = Model(model=model_name, type="main", engine=engine, parameters=parameters)
-        full_llm_rails_config = _update_models_in_config(full_llm_rails_config, main_model)
+        main_model = Model(
+            model=model_name, type="main", engine=engine, parameters=parameters
+        )
+        full_llm_rails_config = _update_models_in_config(
+            full_llm_rails_config, main_model
+        )
 
     llm_rails = LLMRails(config=full_llm_rails_config, verbose=True)
     llm_rails_instances[configs_cache_key] = llm_rails
 
     # If we have a cache for the events, we restore it
-    llm_rails.events_history_cache = llm_rails_events_history_cache.get(configs_cache_key, {})
+    llm_rails.events_history_cache = llm_rails_events_history_cache.get(
+        configs_cache_key, {}
+    )
 
     return llm_rails
 
@@ -393,7 +406,11 @@ def process_chunk(chunk: Any) -> Union[Any, ChunkError]:
         Union[Any, StreamingError]: StreamingError instance for errors or the original chunk.
     """
     # Convert chunk to string for JSON parsing if needed
-    chunk_str = chunk if isinstance(chunk, str) else json.dumps(chunk) if isinstance(chunk, dict) else str(chunk)
+    chunk_str = (
+        chunk
+        if isinstance(chunk, str)
+        else json.dumps(chunk) if isinstance(chunk, dict) else str(chunk)
+    )
 
     try:
         validated_data = ChunkError.model_validate_json(chunk_str)
@@ -426,7 +443,9 @@ async def chat_completion(body: GuardrailsChatCompletionRequest, request: Reques
     """
     log.info("Got request for config %s", body.guardrails.config_id)
     for logger in registered_loggers:
-        asyncio.get_event_loop().create_task(logger({"endpoint": "/v1/chat/completions", "body": body.json()}))
+        asyncio.get_event_loop().create_task(
+            logger({"endpoint": "/v1/chat/completions", "body": body.json()})
+        )
 
     # Save the request headers in a context variable.
     api_request_headers.set(request.headers)
@@ -447,8 +466,8 @@ async def chat_completion(body: GuardrailsChatCompletionRequest, request: Reques
     try:
         llm_rails = _get_rails(config_ids, model_name=body.model)
 
-    except ValueError as ex:
-        log.exception(ex)
+    except ValueError as e:
+        log.exception(e)
         return create_error_chat_completion(
             model=body.model,
             error_message=f"Could not load the {config_ids} guardrails configuration. An internal error has occurred.",
@@ -486,7 +505,10 @@ async def chat_completion(body: GuardrailsChatCompletionRequest, request: Reques
 
         # Validate state format if provided
         if body.guardrails.state is not None and body.guardrails.state != {}:
-            if "events" not in body.guardrails.state and "state" not in body.guardrails.state:
+            if (
+                "events" not in body.guardrails.state
+                and "state" not in body.guardrails.state
+            ):
                 raise HTTPException(
                     status_code=422,
                     detail="Invalid state format: state must contain 'events' or 'state' key. Use an empty dict {} to start a new conversation.",
@@ -534,7 +556,11 @@ async def chat_completion(body: GuardrailsChatCompletionRequest, request: Reques
 
             # If we're using threads, we also need to update the data before returning
             # the message.
-            if body.guardrails.thread_id and datastore is not None and datastore_key is not None:
+            if (
+                body.guardrails.thread_id
+                and datastore is not None
+                and datastore_key is not None
+            ):
                 await datastore.set(datastore_key, json.dumps(messages + [bot_message]))
 
             # Build the response with OpenAI-compatible format using utility function
@@ -566,8 +592,8 @@ async def chat_completion(body: GuardrailsChatCompletionRequest, request: Reques
 
     except HTTPException:
         raise
-    except Exception as ex:
-        log.exception(ex)
+    except Exception as e:
+        log.exception(e)
         return create_error_chat_completion(
             model=body.model,
             error_message="Internal server error",
@@ -580,114 +606,299 @@ async def chat_completion(body: GuardrailsChatCompletionRequest, request: Reques
 # =============================================================================
 
 
-class MessageCheckResult(BaseModel):
-    """Per-message guardrail check result."""
+@dataclass
+class _CheckLog:
+    """Log data for check result."""
 
-    index: int = Field(description="Index of the message in the request.")
-    role: str = Field(description="Role of the message (user/assistant/tool).")
-    rails: Dict[str, dict] = Field(
-        default_factory=dict,
-        description="Rails that were evaluated for this message and their statuses.",
-    )
+    activated_rails: List[ActivatedRail]
+    stats: Optional[GenerationStats] = None
 
 
-class GuardrailCheckResponseBody(BaseModel):
-    """Response body for the /v1/guardrail/checks endpoint."""
+@dataclass
+class _ToolOutputCheckResult:
+    """Result object for tool output rail checks."""
 
-    status: Literal["success", "blocked", "error"] = Field(
-        description="Overall status: 'success' if all rails passed, 'blocked' if any rail blocked, 'error' for system errors."
-    )
-    rails_status: Dict[str, dict] = Field(
-        default_factory=dict,
-        description="Status of each individual rail that was executed (aggregated across all messages).",
-    )
-    messages: List[MessageCheckResult] = Field(
-        default_factory=list,
-        description="Per-message guardrail check results showing which rails were evaluated for each message.",
-    )
-    guardrails_data: Optional[dict] = Field(
-        default=None,
-        description="Additional data from guardrail execution including logs and statistics.",
-    )
+    response: List[dict]
+    log: _CheckLog
+
+    @classmethod
+    def create(
+        cls, activated_rails: List[ActivatedRail], blocked_message: Optional[str]
+    ):
+        """Create a tool output check result."""
+        response = (
+            [{"role": "assistant", "content": blocked_message}]
+            if blocked_message
+            else []
+        )
+        log = _CheckLog(activated_rails=activated_rails, stats=None)
+        return cls(response=response, log=log)
 
 
 def _load_rails_for_check(
     config_id: Optional[str] = None,
     config_ids: Optional[List[str]] = None,
-    inline_config: Optional[dict] = None,
+    config: Optional[dict] = None,
+    model_name: Optional[str] = None,
 ) -> LLMRails:
     """Load rails from either config_id(s) or inline config.
 
     Args:
         config_id: ID of a server-configured guardrail config
         config_ids: List of config IDs to combine
-        inline_config: Inline guardrail configuration
+        config: Inline guardrail configuration
+        model_name: Model name from request (used when inline config has no models)
 
     Returns:
         LLMRails instance
     """
-    if inline_config:
-        # Handle inline configuration
-        if isinstance(inline_config, dict):
-            models = inline_config.get("models", [])
-            # If no models specified, try to inherit from default/single config
-            server_config_id = app.default_config_id or app.single_config_id
-            if not models and server_config_id:
-                try:
-                    default_rails = _get_rails([server_config_id])
-                    if default_rails.config.models:
-                        inline_config = inline_config.copy()
-                        inline_config["models"] = []
+    if config:
+        # Process inline config
+        if isinstance(config, dict):
+            config = _process_inline_config(config, model_name)
 
-                        for model in default_rails.config.models:
-                            model_dict = {
-                                "type": model.type,
-                                "engine": model.engine,
-                            }
-                            params = dict(model.parameters) if model.parameters else {}
-                            if model.model:
-                                params["model_name"] = model.model
-
-                            # Disable stream_usage for OpenAI-compatible endpoint compatibility
-                            if model.engine == "openai":
-                                params["stream_usage"] = False
-
-                            if params:
-                                model_dict["parameters"] = params
-
-                            inline_config["models"].append(model_dict)
-
-                        log.info(
-                            f"Inherited {len(inline_config['models'])} model(s) from server config '{server_config_id}'"
-                        )
-                except Exception as e:
-                    log.warning(f"Could not inherit models from default config: {e}")
-
-        # Create RailsConfig from inline content
         rails_config = (
-            RailsConfig.from_content(yaml_content=inline_config)
-            if isinstance(inline_config, str)
-            else RailsConfig.from_content(config=inline_config)
+            RailsConfig.from_content(yaml_content=config)
+            if isinstance(config, str)
+            else RailsConfig.from_content(config=config)
         )
         return LLMRails(config=rails_config, verbose=True)
 
     # Use config_id(s) from server
     if config_ids:
-        return _get_rails(config_ids)
-    elif config_id:
-        return _get_rails([config_id])
+        return _get_rails(config_ids, model_name=model_name)
+    if config_id:
+        return _get_rails([config_id], model_name=model_name)
+
+    raise ValueError("Either config, config_id, or config_ids must be provided")
+
+
+def _build_model_dict(model: Model) -> dict:
+    """Build model dictionary for inline config from Model object."""
+    model_dict = {"type": model.type, "engine": model.engine}
+    params = dict(model.parameters) if model.parameters else {}
+
+    if model.model:
+        params["model_name"] = model.model
+
+    if params:
+        model_dict["parameters"] = params
+
+    return model_dict
+
+
+def _override_main_model_name(models: list, model_name: str) -> None:
+    """Override the main model's name in a list of model configs.
+
+    Args:
+        models: List of model config dicts to search and modify
+        model_name: Model name to set on the main model
+    """
+    for model in models:
+        if isinstance(model, dict) and model.get("type") == "main":
+            if "parameters" in model:
+                if not isinstance(model["parameters"], dict):
+                    model["parameters"] = {}
+                model["parameters"]["model_name"] = model_name
+            else:
+                model["model"] = model_name
+            return
+
+    log.warning(f"No main model found in config to override with '{model_name}'")
+
+
+def _validate_model_list(models: list) -> None:
+    """Validate that all items in models list are dicts.
+
+    Args:
+        models: List of model configs to validate
+
+    Raises:
+        ValueError: If any model is not a dict
+    """
+    for idx, model in enumerate(models):
+        if not isinstance(model, dict):
+            raise ValueError(
+                f"Invalid model at index {idx}: expected dict, got {type(model).__name__}"
+            )
+
+
+def _inherit_models_from_server(server_config_id: str) -> list:
+    """Load and return models from server config.
+
+    Args:
+        server_config_id: ID of server config to inherit from
+
+    Returns:
+        List of model config dicts
+
+    Raises:
+        ValueError: If server config cannot be loaded or has no models
+    """
+    try:
+        default_rails = _get_rails([server_config_id])
+        if not default_rails.config.models:
+            raise ValueError(f"Server config '{server_config_id}' has no models defined")
+        return [_build_model_dict(model) for model in default_rails.config.models]
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(
+            f"Could not inherit models from server config '{server_config_id}': {e}"
+        ) from e
+
+
+def _disable_stream_usage_in_models(models: list) -> None:
+    """Disable stream_usage parameter in all model configs.
+
+    Many OpenAI-compatible providers don't support the stream_usage parameter
+    and will error if it's present. We set it to False explicitly to prevent
+    NeMo from defaulting it to True.
+
+    Args:
+        models: List of model config dicts to modify in-place
+    """
+    for model in models:
+        if isinstance(model, dict):
+            if "parameters" not in model:
+                model["parameters"] = {}
+            if isinstance(model["parameters"], dict):
+                model["parameters"]["stream_usage"] = False
+
+
+def _process_inline_config(config: dict, model_name: Optional[str]) -> dict:
+    """Process inline config to ensure it has valid models.
+
+    Handles three scenarios:
+    1. Config has explicit models - validate them
+    2. Config has no models but server has default - inherit them
+    3. Config has no models and no server default - error
+
+    Args:
+        config: Inline config dict
+        model_name: Optional model name to override in final config
+
+    Returns:
+        Processed config dict with models
+
+    Raises:
+        ValueError: If config is invalid or cannot be processed
+    """
+    models = config.get("models")
+
+    # Validate models field type
+    if models is not None and not isinstance(models, list):
+        raise ValueError(
+            f"Invalid inline config: 'models' must be a list, got {type(models).__name__}"
+        )
+
+    models = models if models is not None else []
+    server_config_id = app.default_config_id or app.single_config_id
+    config = copy.deepcopy(config)
+
+    if models:
+        # Scenario 1: Explicit models provided
+        _validate_model_list(config["models"])
+    elif server_config_id:
+        # Scenario 2: Inherit from server config
+        config["models"] = _inherit_models_from_server(server_config_id)
+        log.info(
+            f"Inherited {len(config['models'])} model(s) from server config '{server_config_id}'"
+            + (f", overriding main model with '{model_name}'" if model_name else "")
+        )
     else:
-        raise ValueError("Either config, config_id, or config_ids must be provided")
+        # Scenario 3: No models and no server config
+        raise ValueError(
+            "Inline config has no models defined. Either provide explicit model configuration "
+            "or ensure the server is configured with a default config (--default-config-id)."
+        )
+
+    # Override main model name if requested
+    if model_name:
+        _override_main_model_name(config["models"], model_name)
+
+    # Disable stream_usage for all models for compatibility
+    _disable_stream_usage_in_models(config["models"])
+
+    return config
+
+
+def _convert_tool_call_to_nemo_format(tool_call: dict) -> dict:
+    """Convert OpenAI-style tool call to NeMo format."""
+    if "function" in tool_call:
+        # OpenAI format
+        args = tool_call["function"]["arguments"]
+        return {
+            "id": tool_call.get("id", ""),
+            "name": tool_call["function"]["name"],
+            "args": json.loads(args) if isinstance(args, str) else args,
+            "type": "tool_call",
+        }
+    # Already in NeMo format
+    return tool_call
+
+
+async def _check_tool_output_rails(
+    llm_rails: LLMRails, tool_calls: list
+) -> _ToolOutputCheckResult:
+    """Check tool output rails and return a result object."""
+    nemo_tool_calls = [_convert_tool_call_to_nemo_format(tc) for tc in tool_calls]
+    events = [utils.new_event_dict("BotToolCalls", tool_calls=nemo_tool_calls)]
+    result_events = await llm_rails.runtime.generate_events(events)
+
+    # Extract activated rails and blocked message
+    activated_rail_names = [
+        event.get("flow_id")
+        for event in result_events
+        if event.get("type") == "StartToolOutputRail" and event.get("flow_id")
+    ]
+    blocked_message = next(
+        (
+            event.get("script")
+            for event in result_events
+            if event.get("type") == "StartUtteranceBotAction"
+        ),
+        None,
+    )
+
+    # Create rail objects with blocking status
+    is_blocked = blocked_message is not None
+    rail_objects = [
+        ActivatedRail(
+            type="tool_output",
+            name=name,
+            stop=is_blocked,
+            decisions=[],
+            executed_actions=[],
+        )
+        for name in activated_rail_names
+    ]
+
+    return _ToolOutputCheckResult.create(rail_objects, blocked_message)
+
+
+def _get_config_ids_from_request(
+    body: GuardrailsChatCompletionRequest,
+) -> Optional[List[str]]:
+    """Get config IDs from request or server default."""
+    if body.guardrails.config_ids:
+        return body.guardrails.config_ids
+
+    server_config_id = app.default_config_id or app.single_config_id
+    if server_config_id:
+        return [server_config_id]
+
+    return None
 
 
 def _create_check_error_response(
     error: str, details: Optional[str] = None
-) -> GuardrailCheckResponseBody:
+) -> GuardrailCheckResponse:
     """Create a standardized error response for guardrail checks."""
     guardrails_data = {"error": error}
     if details:
         guardrails_data["details"] = details
-    return GuardrailCheckResponseBody(
+    return GuardrailCheckResponse(
         status="error", rails_status={}, guardrails_data=guardrails_data
     )
 
@@ -717,22 +928,188 @@ def _create_check_options(
     )
 
 
-def _calculate_check_status(rails_status: dict) -> str:
+def _calculate_check_status(rails_status: dict[str, RailStatus]) -> str:
     """Calculate overall status from rails status dictionary."""
     return (
         "blocked"
-        if any(s.get("status") == "blocked" for s in rails_status.values())
+        if any(s.status == "blocked" for s in rails_status.values())
         else "success"
+    )
+
+
+def _has_response_content(result: object) -> bool:
+    """Check if result has a non-empty response."""
+    return hasattr(result, "response") and bool(result.response)
+
+
+def _is_rail_blocked(rail: ActivatedRail, role: str, msg: dict, result: object) -> bool:
+    """Determine if a rail blocked execution."""
+    if getattr(rail, "stop", False):
+        return True
+
+    # Tool_input rails use abort which doesn't set stop=True (NeMo quirk)
+    if role == "tool":
+        return (
+            _has_response_content(result)
+            and result.response[0].get("content", "").strip() != ""
+        )
+
+    # Tool_output rails block if they generated a response
+    if role == "assistant" and "tool_calls" in msg:
+        return _has_response_content(result)
+
+    return False
+
+
+def _update_rails_status(
+    rails_status: dict[str, RailStatus],
+    message_rails: dict[str, RailStatus],
+    rail: ActivatedRail,
+    is_blocked: bool,
+):
+    """Update both aggregated and per-message rails status."""
+    status = "blocked" if is_blocked else "success"
+    rail_name = getattr(rail, "name", "unknown")
+    rail_status = RailStatus(status=status)
+
+    if rail_name not in rails_status or status == "blocked":
+        rails_status[rail_name] = rail_status
+
+    message_rails[rail_name] = rail_status
+
+
+def _merge_stats(aggregated_log: GenerationLog, new_stats: GenerationStats):
+    """Merge generation stats into aggregated log."""
+    for field_name, new_value in new_stats.model_dump().items():
+        if new_value is not None and isinstance(new_value, (int, float)):
+            current_value = getattr(aggregated_log.stats, field_name) or 0
+            setattr(aggregated_log.stats, field_name, current_value + new_value)
+
+
+def _process_result_log(
+    result: object,
+    role: str,
+    msg: dict,
+    rails_status: dict[str, RailStatus],
+    message_rails: dict[str, RailStatus],
+    aggregated_log: GenerationLog,
+):
+    """Process result log and update rails status."""
+    if not (hasattr(result, "log") and result.log):
+        return
+
+    if hasattr(result.log, "activated_rails") and result.log.activated_rails:
+        for rail in result.log.activated_rails:
+            is_blocked = _is_rail_blocked(rail, role, msg, result)
+            _update_rails_status(rails_status, message_rails, rail, is_blocked)
+            aggregated_log.activated_rails.append(rail)
+
+    if hasattr(result.log, "stats") and result.log.stats:
+        _merge_stats(aggregated_log, result.log.stats)
+
+
+def _build_final_response(
+    rails_status: dict[str, RailStatus],
+    message_results: List[MessageCheckResult],
+    aggregated_log: GenerationLog,
+) -> GuardrailCheckResponse:
+    """Build final guardrail check response."""
+    guardrails_data = {
+        "log": {
+            "activated_rails": [
+                rail.name for rail in aggregated_log.activated_rails if rail.stop
+            ],
+            "stats": aggregated_log.stats.model_dump() if aggregated_log.stats else {},
+        }
+    }
+
+    return GuardrailCheckResponse(
+        status=_calculate_check_status(rails_status),
+        rails_status=rails_status,
+        messages=message_results,
+        guardrails_data=guardrails_data,
+    )
+
+
+def _json_response(response: GuardrailCheckResponse) -> str:
+    """Convert response to JSON string with newline."""
+    return json.dumps(response.model_dump()) + "\n"
+
+
+async def _process_message(
+    llm_rails: LLMRails, msg: dict, role: str, content: str
+) -> tuple[Optional[object], Optional[GenerationOptions]]:
+    """Process a single message and return result and options.
+
+    Returns:
+        Tuple of (result, options). If result is provided, options will be None.
+        If options is provided, result will be None and caller should generate.
+
+    Raises:
+        ValueError: If the message role is not supported
+    """
+    if role == "user":
+        return None, _create_check_options(run_input=True)
+
+    if role == "assistant":
+        if "tool_calls" in msg:
+            # Tool output rails - validate tool calls before execution
+            result = await _check_tool_output_rails(llm_rails, msg["tool_calls"])
+            return result, None
+        # Regular output rails - validate assistant responses
+        return None, _create_check_options(run_output=True)
+
+    if role == "tool":
+        # Tool messages trigger tool_input rails (validate tool responses)
+        return None, _create_check_options(run_tool_input=True)
+
+    # Unsupported role
+    raise ValueError(
+        f"Unsupported message role: '{role}'. "
+        f"Supported roles are: 'user', 'assistant', 'tool'."
+    )
+
+
+def _build_check_messages(role: str, content: str, msg: dict) -> List[dict]:
+    """Build messages list for rail checking based on role.
+
+    Args:
+        role: The message role
+        content: The message content
+        msg: The original message dict
+
+    Returns:
+        List of messages to pass to the rails
+
+    Raises:
+        ValueError: If the message role is not supported
+    """
+    if role == "user":
+        return [{"role": "user", "content": content}]
+
+    if role == "assistant":
+        return [
+            {"role": "user", "content": ""},
+            {"role": "assistant", "content": content},
+        ]
+
+    if role == "tool":
+        tool_msg = {"role": "tool", "content": content}
+        tool_msg.update({k: msg[k] for k in ["name", "tool_call_id"] if k in msg})
+        return [tool_msg]
+
+    # This should never be reached since _process_message validates the role first
+    raise ValueError(
+        f"Unsupported message role: '{role}'. "
+        f"Supported roles are: 'user', 'assistant', 'tool'."
     )
 
 
 @app.post(
     "/v1/guardrail/checks",
-    response_model=GuardrailCheckResponseBody,
+    response_model=GuardrailCheckResponse,
 )
-async def guardrail_checks(
-    body: GuardrailsChatCompletionRequest, request: Request
-):
+async def guardrail_checks(body: GuardrailsChatCompletionRequest, request: Request):
     """Check messages against guardrails without generating LLM responses.
 
     This endpoint validates messages against configured guardrails using role-based routing:
@@ -745,7 +1122,7 @@ async def guardrail_checks(
         request: FastAPI request object (headers captured for guardrail actions)
 
     Returns:
-        GuardrailCheckResponseBody with status and rails_status for each evaluated rail
+        GuardrailCheckResponse with status and rails_status for each evaluated rail
     """
     log.info("Got guardrail check request for config %s", body.guardrails.config_id)
     for logger in registered_loggers:
@@ -771,246 +1148,78 @@ async def guardrail_checks(
         try:
             # Validate messages
             if not body.messages:
-                yield (
-                    json.dumps(
-                        _create_check_error_response(
-                            "Messages list cannot be empty."
-                        ).model_dump()
-                    )
-                    + "\n"
+                yield _json_response(
+                    _create_check_error_response("Messages list cannot be empty.")
                 )
                 return
 
-            # Load rails configuration (either inline or from server)
+            # Load rails configuration
             try:
-                # Check if inline config is provided
                 if body.guardrails.config:
-                    llm_rails = _load_rails_for_check(inline_config=body.guardrails.config)
+                    llm_rails = _load_rails_for_check(
+                        config=body.guardrails.config, model_name=body.model
+                    )
                 else:
-                    # Use config_ids from request or default/single config
-                    config_ids = body.guardrails.config_ids
+                    config_ids = _get_config_ids_from_request(body)
                     if not config_ids:
-                        server_config_id = app.default_config_id or app.single_config_id
-                        if server_config_id:
-                            config_ids = [server_config_id]
-                        else:
-                            yield (
-                                json.dumps(
-                                    _create_check_error_response(
-                                        "No guardrails configuration provided and no default configuration set on server."
-                                    ).model_dump()
-                                )
-                                + "\n"
+                        yield _json_response(
+                            _create_check_error_response(
+                                "No guardrails configuration provided and no default configuration set on server."
                             )
-                            return
-                    llm_rails = _load_rails_for_check(config_ids=config_ids)
-            except Exception as ex:
-                log.exception(ex)
-                if body.guardrails.config:
-                    error_msg = "Failed to load inline guardrails configuration."
-                else:
-                    error_msg = (
-                        f"Could not load guardrails configuration."
-                        if isinstance(ex, ValueError)
-                        else "Failed to load guardrails configuration."
+                        )
+                        return
+                    llm_rails = _load_rails_for_check(
+                        config_ids=config_ids, model_name=body.model
                     )
-                yield (
-                    json.dumps(
-                        _create_check_error_response(error_msg, str(ex)).model_dump()
-                    )
-                    + "\n"
+            except Exception as e:
+                log.exception(e)
+                error_msg = (
+                    "Failed to load inline guardrails configuration."
+                    if body.guardrails.config
+                    else "Could not load guardrails configuration."
                 )
+                yield _json_response(_create_check_error_response(error_msg, str(e)))
                 return
 
             rails_status = {}
             message_results = []
 
             # Use NeMo's GenerationLog for accumulation instead of manual tracking
-            from nemoguardrails.rails.llm.options import ActivatedRail, GenerationLog, GenerationStats
             aggregated_log = GenerationLog(activated_rails=[], stats=GenerationStats())
 
             # Process each message independently based on role
             for msg_idx, msg in enumerate(body.messages):
-                if not isinstance(msg, dict) or "role" not in msg:
+                # Pydantic validates messages is List[dict], but role might be missing
+                if "role" not in msg:
+                    log.warning(
+                        f"Skipping message at index {msg_idx}: missing 'role' field"
+                    )
                     continue
 
                 role = msg.get("role")
                 content = msg.get("content", "")
-                log.info(f"Processing message with role: {role}")
+                log.info(f"Processing message {msg_idx} with role: {role}")
 
-                # Track per-message rails
-                message_rails = {}
+                # Process message to get result or options
+                result, options = await _process_message(llm_rails, msg, role, content)
 
-                if role == "user":
-                    options = _create_check_options(run_input=True)
-                    check_messages = [{"role": "user", "content": content}]
-                elif role == "assistant":
-                    # Check if this is a tool call (tool_output rails) or regular output (output rails)
-                    if "tool_calls" in msg:
-                        # Tool output rails - validate tool calls before execution
-                        # For tool_output, we need to use events directly, not messages
-                        # Convert OpenAI-style tool_calls to NeMo format
-                        from nemoguardrails.utils import new_event_dict
-
-                        nemo_tool_calls = []
-                        for tc in msg["tool_calls"]:
-                            # Handle both OpenAI format and NeMo format
-                            if "function" in tc:
-                                # OpenAI format
-                                tool_call = {
-                                    "id": tc.get("id", ""),
-                                    "name": tc["function"]["name"],
-                                    "args": (
-                                        json.loads(tc["function"]["arguments"])
-                                        if isinstance(tc["function"]["arguments"], str)
-                                        else tc["function"]["arguments"]
-                                    ),
-                                    "type": "tool_call",
-                                }
-                            else:
-                                # Already in NeMo format
-                                tool_call = tc
-                            nemo_tool_calls.append(tool_call)
-
-                        # Create BotToolCalls event
-                        events = [new_event_dict("BotToolCalls", tool_calls=nemo_tool_calls)]
-                        result_events = await llm_rails.runtime.generate_events(events)
-
-                        # Extract which rails actually ran by looking for StartToolOutputRail events
-                        activated_rail_names = []
-                        for event in result_events:
-                            if event.get("type") == "StartToolOutputRail":
-                                rail_name = event.get("flow_id")
-                                if rail_name:
-                                    activated_rail_names.append(rail_name)
-
-                        # Check if rails blocked (look for bot message in events)
-                        blocked_message = None
-                        for event in result_events:
-                            if event.get("type") == "StartUtteranceBotAction":
-                                blocked_message = event.get("script")
-                                break
-
-                        # Create ActivatedRail objects
-                        rail_objects = [
-                            ActivatedRail(
-                                type="tool_output",
-                                name=rail_name,
-                                stop=(blocked_message is not None),  # Blocked if message generated
-                                decisions=[],
-                                executed_actions=[],
-                            )
-                            for rail_name in activated_rail_names
-                        ]
-
-                        # Create a GenerationResponse-like object for consistent handling below
-                        result = type(
-                            "obj",
-                            (object,),
-                            {
-                                "response": (
-                                    [{"role": "assistant", "content": blocked_message}] if blocked_message else []
-                                ),
-                                "log": type(
-                                    "obj",
-                                    (object,),
-                                    {"activated_rails": rail_objects, "stats": None},
-                                )(),
-                            },
-                        )()
-
-                        # Skip the generate_async call below for tool_output
-                        check_messages = None
-                    else:
-                        # Regular output rails - validate assistant responses
-                        options = _create_check_options(run_output=True)
-                        check_messages = [
-                            {"role": "user", "content": ""},
-                            {"role": "assistant", "content": content},
-                        ]
-                elif role == "tool":
-                    # Tool messages trigger tool_input rails (validate tool responses)
-                    options = _create_check_options(run_tool_input=True)
-
-                    tool_msg = {
-                        "role": "tool",
-                        "content": content,
-                    }
-                    # Include tool name if present (required for tool messages)
-                    if "name" in msg:
-                        tool_msg["name"] = msg["name"]
-                    # Include tool_call_id if present (recommended but optional)
-                    if "tool_call_id" in msg:
-                        tool_msg["tool_call_id"] = msg["tool_call_id"]
-
-                    check_messages = [tool_msg]
-                else:
-                    # Skip unknown roles
-                    continue
-
-                # For tool_output rails, we already have the result from generate_events
-                if check_messages is not None:
+                # If we got options, build messages and generate
+                if options:
+                    check_messages = _build_check_messages(role, content, msg)
                     result = await llm_rails.generate_async(
                         messages=check_messages, options=options
                     )
 
-                # Handle result from both generate_async (GenerationResponse) and generate_events (custom object)
-                if hasattr(result, "log") and result.log:
-                    # For tool_input rails: check if a bot response was generated (indicates blocking)
-                    # Tool_input rails only generate responses when they abort/block
-                    tool_input_blocked = (
-                        role == "tool"
-                        and hasattr(result, "response")
-                        and result.response
-                        and len(result.response) > 0
-                        and result.response[0].get("content", "").strip() != ""
-                    )
+                # result should always exist for supported roles
+                if not result:
+                    log.warning(f"No result generated for message {msg_idx} with role {role}")
+                    continue
 
-                    # For tool_output rails: check if we got a blocking message
-                    tool_output_blocked = (
-                        role == "assistant"
-                        and "tool_calls" in msg
-                        and hasattr(result, "response")
-                        and result.response
-                        and len(result.response) > 0
-                    )
-
-                    if (
-                        hasattr(result.log, "activated_rails")
-                        and result.log.activated_rails
-                    ):
-                        for rail in result.log.activated_rails:
-                            # Check if rail blocked execution
-                            # Note: tool_input rails use abort which doesn't set stop=True (NeMo bug)
-                            # For tool_input rails, we detect blocking by checking if a bot response was generated
-                            # For tool_output rails, we detect blocking from our custom result object
-                            is_blocked = (
-                                getattr(rail, "stop", False)
-                                or (tool_input_blocked and getattr(rail, "type", "") in ["dialog", "tool_input"])
-                                or (tool_output_blocked and getattr(rail, "type", "") == "tool_output")
-                            )
-
-                            status = "blocked" if is_blocked else "success"
-                            rail_name = getattr(rail, "name", "unknown")
-
-                            # Update aggregated rails_status
-                            if rail_name not in rails_status or status == "blocked":
-                                rails_status[rail_name] = {"status": status}
-
-                            # Track per-message rail status
-                            message_rails[rail_name] = {"status": status}
-
-                            # Add to aggregated log (full ActivatedRail object)
-                            aggregated_log.activated_rails.append(rail)
-
-                    if hasattr(result.log, "stats") and result.log.stats:
-                        # Merge stats using Pydantic's model_dump for robustness
-                        # This automatically handles all GenerationStats fields (current and future)
-                        new_stats_dict = result.log.stats.model_dump()
-                        for field_name, new_value in new_stats_dict.items():
-                            if new_value is not None and isinstance(new_value, (int, float)):
-                                current_value = getattr(aggregated_log.stats, field_name) or 0
-                                setattr(aggregated_log.stats, field_name, current_value + new_value)
+                # Process result and track activated rails
+                message_rails: dict[str, RailStatus] = {}
+                _process_result_log(
+                    result, role, msg, rails_status, message_rails, aggregated_log
+                )
 
                 # Add message result
                 message_results.append(
@@ -1019,58 +1228,38 @@ async def guardrail_checks(
 
                 # Stream intermediate results if requested
                 if body.stream:
-                    yield (
-                        json.dumps(
-                            {
-                                "status": _calculate_check_status(rails_status),
-                                "rails_status": rails_status.copy(),
-                                "guardrails_data": None,
-                            }
-                        )
-                        + "\n"
+                    intermediate = GuardrailCheckResponse(
+                        status=_calculate_check_status(rails_status),
+                        rails_status=rails_status.copy(),
+                        messages=[],
+                        guardrails_data=None,
                     )
+                    yield _json_response(intermediate)
 
-            # Build final response using aggregated GenerationLog
-            # Only include names of rails that blocked (for backward compatibility)
-            guardrails_data = {
-                "log": {
-                    "activated_rails": [rail.name for rail in aggregated_log.activated_rails if rail.stop],
-                    "stats": aggregated_log.stats.model_dump() if aggregated_log.stats else {},
-                }
-            }
-
-            final_result = GuardrailCheckResponseBody(
-                status=_calculate_check_status(rails_status),
-                rails_status=rails_status,
-                messages=message_results,
-                guardrails_data=guardrails_data,
+            # Build and yield final response
+            final_result = _build_final_response(
+                rails_status, message_results, aggregated_log
             )
-            yield json.dumps(final_result.model_dump()) + "\n"
+            yield _json_response(final_result)
 
-        except Exception as ex:
-            log.exception(ex)
-            yield (
-                json.dumps(
-                    _create_check_error_response(
-                        "Internal server error.", str(ex)
-                    ).model_dump()
-                )
-                + "\n"
+        except Exception as e:
+            log.exception(e)
+            yield _json_response(
+                _create_check_error_response("Internal server error.", str(e))
             )
 
     if body.stream:
         return StreamingResponse(process_checks(), media_type="application/x-ndjson")
     else:
-        # Non-streaming: collect all results and return final response
-        results = []
+        # Non-streaming: return only the final result
+        final_result = None
         async for result in process_checks():
-            results.append(result)
+            final_result = result
 
-        # Return the last result (final response)
-        if results:
-            return GuardrailCheckResponseBody.model_validate_json(results[-1])
+        if final_result:
+            return GuardrailCheckResponse.model_validate_json(final_result)
         else:
-            return _create_check_error_response("No results generated.")
+            return _create_check_error_response("No results generated")
 
 
 # By default, there are no challenges
@@ -1120,7 +1309,9 @@ def start_auto_reload_monitoring():
                     return None
 
                 elif event.event_type == "created" or event.event_type == "modified":
-                    log.info(f"Watchdog received {event.event_type} event for file {event.src_path}")
+                    log.info(
+                        f"Watchdog received {event.event_type} event for file {event.src_path}"
+                    )
 
                     # Compute the relative path
                     src_path_str = str(event.src_path)
@@ -1144,7 +1335,9 @@ def start_auto_reload_monitoring():
                                 # We save the events history cache, to restore it on the new instance
                                 llm_rails_events_history_cache[config_id] = val
 
-                            log.info(f"Configuration {config_id} has changed. Clearing cache.")
+                            log.info(
+                                f"Configuration {config_id} has changed. Clearing cache."
+                            )
 
         observer = Observer()
         event_handler = Handler()
@@ -1159,7 +1352,9 @@ def start_auto_reload_monitoring():
 
     except ImportError:
         # Since this is running in a separate thread, we just print the error.
-        print("The auto-reload feature requires `watchdog`. Please install using `pip install watchdog`.")
+        print(
+            "The auto-reload feature requires `watchdog`. Please install using `pip install watchdog`."
+        )
         # Force close everything.
         os._exit(-1)
 
