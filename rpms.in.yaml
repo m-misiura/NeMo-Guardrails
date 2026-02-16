@@ -8,6 +8,10 @@ contentOrigin:
 packages:
   - gcc-c++
   - python3-devel
+
+reinstallPackages:
+  - setup
+
 context:
   containerfile:
     file: Dockerfile.konflux

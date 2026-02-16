@@ -18,6 +18,13 @@ arches:
     name: python3-pip
     evr: 21.3.1-1.el9
     sourcerpm: python-pip-21.3.1-1.el9.src.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/s/setup-2.13.7-10.el9.noarch.rpm
+    repoid: ubi-9-baseos-rpms
+    size: 153791
+    checksum: sha256:0891d395ce067121c28932534237ad1ce231f2bfa987411ad62e73a12d11eb6a
+    name: setup
+    evr: 2.13.7-10.el9
+    sourcerpm: setup-2.13.7-10.el9.src.rpm
   source: []
   module_metadata: []
 - arch: ppc64le
@@ -36,6 +43,13 @@ arches:
     name: python3-pip
     evr: 21.3.1-1.el9
     sourcerpm: python-pip-21.3.1-1.el9.src.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/s/setup-2.13.7-10.el9.noarch.rpm
+    repoid: ubi-9-baseos-rpms
+    size: 153791
+    checksum: sha256:0891d395ce067121c28932534237ad1ce231f2bfa987411ad62e73a12d11eb6a
+    name: setup
+    evr: 2.13.7-10.el9
+    sourcerpm: setup-2.13.7-10.el9.src.rpm
   source: []
   module_metadata: []
 - arch: x86_64
@@ -61,5 +75,12 @@ arches:
     name: python3-pip
     evr: 21.3.1-1.el9
     sourcerpm: python-pip-21.3.1-1.el9.src.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/s/setup-2.13.7-10.el9.noarch.rpm
+    repoid: ubi-9-baseos-rpms
+    size: 153791
+    checksum: sha256:0891d395ce067121c28932534237ad1ce231f2bfa987411ad62e73a12d11eb6a
+    name: setup
+    evr: 2.13.7-10.el9
+    sourcerpm: setup-2.13.7-10.el9.src.rpm
   source: []
   module_metadata: []
