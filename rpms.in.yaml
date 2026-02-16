@@ -1,0 +1,13 @@
+arches:
+  - x86_64
+  - aarch64
+  - ppc64le
+contentOrigin:
+  repofiles:
+    - ./ubi.repo
+packages:
+  - gcc-c++
+  - python3-devel
+context:
+  containerfile:
+    file: Dockerfile.konflux

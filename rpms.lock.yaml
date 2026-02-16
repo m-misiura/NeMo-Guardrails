@@ -1,0 +1,65 @@
+---
+lockfileVersion: 1
+lockfileVendor: redhat
+arches:
+- arch: aarch64
+  packages:
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/appstream/os/Packages/p/python3-devel-3.9.25-3.el9_7.aarch64.rpm
+    repoid: ubi-9-appstream-rpms
+    size: 257429
+    checksum: sha256:620fa8fdeb38825f2d9dc6bdd87f812271244a72aef692bcb9855b13584990fb
+    name: python3-devel
+    evr: 3.9.25-3.el9_7
+    sourcerpm: python3.9-3.9.25-3.el9_7.src.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/appstream/os/Packages/p/python3-pip-21.3.1-1.el9.noarch.rpm
+    repoid: ubi-9-appstream-rpms
+    size: 2133958
+    checksum: sha256:2ff41d5bbfb5bf09378a499b56d9854e9389e3a8648897426d144f4b385f8730
+    name: python3-pip
+    evr: 21.3.1-1.el9
+    sourcerpm: python-pip-21.3.1-1.el9.src.rpm
+  source: []
+  module_metadata: []
+- arch: ppc64le
+  packages:
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/appstream/os/Packages/p/python3-devel-3.9.25-3.el9_7.ppc64le.rpm
+    repoid: ubi-9-appstream-rpms
+    size: 257540
+    checksum: sha256:5667000fa0f9aad160642b46aea857b93688cce624b577ed2b35e368e1445da9
+    name: python3-devel
+    evr: 3.9.25-3.el9_7
+    sourcerpm: python3.9-3.9.25-3.el9_7.src.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/appstream/os/Packages/p/python3-pip-21.3.1-1.el9.noarch.rpm
+    repoid: ubi-9-appstream-rpms
+    size: 2133958
+    checksum: sha256:2ff41d5bbfb5bf09378a499b56d9854e9389e3a8648897426d144f4b385f8730
+    name: python3-pip
+    evr: 21.3.1-1.el9
+    sourcerpm: python-pip-21.3.1-1.el9.src.rpm
+  source: []
+  module_metadata: []
+- arch: x86_64
+  packages:
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os/Packages/l/libxcrypt-compat-4.4.18-3.el9.x86_64.rpm
+    repoid: ubi-9-appstream-rpms
+    size: 93189
+    checksum: sha256:2bd6c288e1970a001d3a1ae69166c0d926d9c87ce892edcb2110f4e142c12a7a
+    name: libxcrypt-compat
+    evr: 4.4.18-3.el9
+    sourcerpm: libxcrypt-4.4.18-3.el9.src.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os/Packages/p/python3-devel-3.9.25-3.el9_7.x86_64.rpm
+    repoid: ubi-9-appstream-rpms
+    size: 257528
+    checksum: sha256:659aa8226d32a00e7050f6c00d0393ac5e9207cf4788576443ee0edfca6c9e11
+    name: python3-devel
+    evr: 3.9.25-3.el9_7
+    sourcerpm: python3.9-3.9.25-3.el9_7.src.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os/Packages/p/python3-pip-21.3.1-1.el9.noarch.rpm
+    repoid: ubi-9-appstream-rpms
+    size: 2133958
+    checksum: sha256:2ff41d5bbfb5bf09378a499b56d9854e9389e3a8648897426d144f4b385f8730
+    name: python3-pip
+    evr: 21.3.1-1.el9
+    sourcerpm: python-pip-21.3.1-1.el9.src.rpm
+  source: []
+  module_metadata: []
