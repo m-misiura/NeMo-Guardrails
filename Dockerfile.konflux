@@ -135,6 +135,7 @@ USER 0
 WORKDIR /app
 
 ARG TARGETARCH
+
 ARG GUARDRAILS_PROFILE=opensource
 ENV LD_LIBRARY_PATH=/usr/local/lib64:/usr/local/lib:/usr/lib64:/usr/lib:/app/.openblas/lib
 ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig/:/app/.openblas/lib/pkgconfig
