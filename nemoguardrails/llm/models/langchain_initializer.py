@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -225,7 +225,7 @@ def _init_chat_completion_model(model_name: str, provider_name: str, kwargs: Dic
         raise
 
 
-def _init_text_completion_model(model_name: str, provider_name: str, kwargs: Dict[str, Any]) -> BaseLLM:
+def _init_text_completion_model(model_name: str, provider_name: str, kwargs: Dict[str, Any]) -> BaseLLM | None:
     """Initialize a text completion model.
 
     Args:
@@ -234,22 +234,21 @@ def _init_text_completion_model(model_name: str, provider_name: str, kwargs: Dic
         kwargs: Additional arguments to pass to the model initialization
 
     Returns:
-        An initialized text completion model
-
-    Raises:
-        RuntimeError: If the provider is not found
+        An initialized text completion model, or None if the provider is not found
     """
-    provider_cls = _get_text_completion_provider(provider_name)
+    try:
+        provider_cls = _get_text_completion_provider(provider_name)
+    except RuntimeError:
+        return None
+
     if provider_cls is None:
-        raise ValueError()
+        return None
+
     kwargs = _update_model_kwargs(provider_cls, model_name, kwargs)
-    # remove stream_usage parameter as it's not supported by text completion APIs
-    # (e.g., OpenAI's AsyncCompletions.create() doesn't accept this parameter)
-    kwargs.pop("stream_usage", None)
     return provider_cls(**kwargs)
 
 
-def _init_community_chat_models(model_name: str, provider_name: str, kwargs: Dict[str, Any]) -> BaseChatModel:
+def _init_community_chat_models(model_name: str, provider_name: str, kwargs: Dict[str, Any]) -> BaseChatModel | None:
     """Initialize community chat models.
 
     Args:
@@ -264,14 +263,19 @@ def _init_community_chat_models(model_name: str, provider_name: str, kwargs: Dic
         ImportError: If langchain_community is not installed
         ModelInitializationError: If model initialization fails
     """
-    provider_cls = _get_chat_completion_provider(provider_name)
+    try:
+        provider_cls = _get_chat_completion_provider(provider_name)
+    except RuntimeError:
+        return None
+
     if provider_cls is None:
-        raise ValueError()
+        return None
+
     kwargs = _update_model_kwargs(provider_cls, model_name, kwargs)
     return provider_cls(**kwargs)
 
 
-def _init_gpt35_turbo_instruct(model_name: str, provider_name: str, kwargs: Dict[str, Any]) -> BaseLLM:
+def _init_gpt35_turbo_instruct(model_name: str, provider_name: str, kwargs: Dict[str, Any]) -> BaseLLM | None:
     """Initialize GPT-3.5 Turbo Instruct model.
 
     Currently init_chat_model from langchain infers this as a chat model.
@@ -316,9 +320,7 @@ def _init_nvidia_model(model_name: str, provider_name: str, kwargs: Dict[str, An
         ModelInitializationError: If model initialization fails
     """
     try:
-        from nemoguardrails.llm.providers._langchain_nvidia_ai_endpoints_patch import (
-            ChatNVIDIA,
-        )
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA  # type: ignore[import-not-found]
 
         package_version = version("langchain_nvidia_ai_endpoints")
 
@@ -329,20 +331,18 @@ def _init_nvidia_model(model_name: str, provider_name: str, kwargs: Dict[str, An
             )
 
         return ChatNVIDIA(model=model_name, **kwargs)
-    except ImportError as e:
+    except ImportError:
         raise ImportError(
             "Could not import langchain_nvidia_ai_endpoints, please install it with "
             "`pip install langchain-nvidia-ai-endpoints`."
         )
 
 
-# special model handlers
 _SPECIAL_MODEL_INITIALIZERS = {
     "gpt-3.5-turbo-instruct": _init_gpt35_turbo_instruct,
 }
 
-# provider-specific handlers
-_PROVIDER_INITIALIZERS = {
+_PROVIDER_INITIALIZERS: Dict[str, Any] = {
     "nvidia_ai_endpoints": _init_nvidia_model,
     "nim": _init_nvidia_model,
 }
@@ -379,6 +379,8 @@ def _handle_model_special_cases(
         return None
 
     result = initializer(model_name, provider_name, kwargs)
+    if result is None:
+        return None
     if not isinstance(result, (BaseChatModel, BaseLLM)):
         raise TypeError("Initializer returned an invalid type")
     return result

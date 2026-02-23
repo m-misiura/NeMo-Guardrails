@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,7 @@ async def generate_user_intent():
 
 
 @action(is_system_action=True)
-async def generate_next_step():
+async def generate_next_steps():
     return ActionResult(events=[{"type": "BotIntent", "intent": "respond to question"}])
 
 
@@ -38,5 +38,5 @@ async def generate_bot_message():
 
 def init(app: LLMRails):
     app.register_action(generate_user_intent)
-    app.register_action(generate_next_step)
+    app.register_action(generate_next_steps)
     app.register_action(generate_bot_message)

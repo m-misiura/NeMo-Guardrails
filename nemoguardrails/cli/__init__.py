@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -148,7 +148,14 @@ def server(
 ):
     """Start a NeMo Guardrails server."""
 
-    from nemoguardrails.server import api
+    try:
+        from nemoguardrails.server import api
+    except ImportError:
+        typer.secho(
+            "The 'openai' package is required to run the server. Install it with: pip install nemoguardrails[server]",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
 
     if config:
         # We make sure there is no trailing separator, as that might break things in

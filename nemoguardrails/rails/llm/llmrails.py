@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@ import os
 import re
 import threading
 import time
+import warnings
 from functools import partial
 from typing import (
     Any,
@@ -70,6 +71,11 @@ from nemoguardrails.context import (
 from nemoguardrails.embeddings.index import EmbeddingsIndex
 from nemoguardrails.embeddings.providers import register_embedding_provider
 from nemoguardrails.embeddings.providers.base import EmbeddingModel
+from nemoguardrails.exceptions import (
+    InvalidModelConfigurationError,
+    InvalidRailsConfigurationError,
+    StreamingNotSupportedError,
+)
 from nemoguardrails.kb.kb import KnowledgeBase
 from nemoguardrails.llm.cache import CacheInterface, LFUCache
 from nemoguardrails.llm.models.initializer import (
@@ -91,6 +97,9 @@ from nemoguardrails.rails.llm.options import (
     GenerationLog,
     GenerationOptions,
     GenerationResponse,
+    RailsResult,
+    RailStatus,
+    RailType,
 )
 from nemoguardrails.rails.llm.utils import (
     get_action_details_from_flow_id,
@@ -150,9 +159,6 @@ class LLMRails:
         # TODO: when we update the interface to allow to return a "state object", this
         #   should be removed
         self.events_history_cache = {}
-
-        # Weather the main LLM supports streaming
-        self.main_llm_supports_streaming = False
 
         # We also load the default flows from the `default_flows.yml` file in the current folder.
         # But only for version 1.0.
@@ -225,13 +231,17 @@ class LLMRails:
                         spec.loader.exec_module(config_module)
                         config_modules.append(config_module)
 
+        colang_version_to_runtime: Dict[str, Type[Runtime]] = {
+            "1.0": RuntimeV1_0,
+            "2.x": RuntimeV2_x,
+        }
+        if config.colang_version not in colang_version_to_runtime:
+            raise InvalidRailsConfigurationError(
+                f"Unsupported colang version: {config.colang_version}. Supported versions: {list(colang_version_to_runtime.keys())}"
+            )
+
         # First, we initialize the runtime.
-        if config.colang_version == "1.0":
-            self.runtime = RuntimeV1_0(config=config, verbose=verbose)
-        elif config.colang_version == "2.x":
-            self.runtime = RuntimeV2_x(config=config, verbose=verbose)
-        else:
-            raise ValueError(f"Unsupported colang version: {config.colang_version}.")
+        self.runtime = colang_version_to_runtime[config.colang_version](config=config, verbose=verbose)
 
         # If we have a config_modules with an `init` function, we call it.
         # We need to call this here because the `init` might register additional
@@ -317,20 +327,20 @@ class LLMRails:
             # content safety check input/output flows are special as they have parameters
             flow_name = _normalize_flow_id(flow_name)
             if flow_name not in existing_flows_names:
-                raise ValueError(f"The provided input rail flow `{flow_name}` does not exist")
+                raise InvalidRailsConfigurationError(f"The provided input rail flow `{flow_name}` does not exist")
 
         for flow_name in self.config.rails.output.flows:
             flow_name = _normalize_flow_id(flow_name)
             if flow_name not in existing_flows_names:
-                raise ValueError(f"The provided output rail flow `{flow_name}` does not exist")
+                raise InvalidRailsConfigurationError(f"The provided output rail flow `{flow_name}` does not exist")
 
         for flow_name in self.config.rails.retrieval.flows:
             if flow_name not in existing_flows_names:
-                raise ValueError(f"The provided retrieval rail flow `{flow_name}` does not exist")
+                raise InvalidRailsConfigurationError(f"The provided retrieval rail flow `{flow_name}` does not exist")
 
         # If both passthrough mode and single call mode are specified, we raise an exception.
         if self.config.passthrough and self.config.rails.dialog.single_call.enabled:
-            raise ValueError(
+            raise InvalidRailsConfigurationError(
                 "The passthrough mode and the single call dialog rails mode can't be used at the same time. "
                 "The single call mode needs to use an altered prompt when prompting the LLM. "
             )
@@ -361,7 +371,8 @@ class LLMRails:
         Returns:
             dict: The prepared kwargs for model initialization
         """
-        kwargs = model_config.parameters or {}
+        # Make a copy to avoid modifying the original model config
+        kwargs = dict(model_config.parameters) if model_config.parameters else {}
 
         # If the optional API Key Environment Variable is set, add it to kwargs
         if model_config.api_key_env_var:
@@ -369,43 +380,7 @@ class LLMRails:
             if api_key:
                 kwargs["api_key"] = api_key
 
-        # enable streaming token usage when streaming is enabled
-        # providers that don't support this parameter will simply ignore it
-        if self.config.streaming:
-            kwargs["stream_usage"] = True
-
         return kwargs
-
-    def _configure_main_llm_streaming(
-        self,
-        llm: Union[BaseLLM, BaseChatModel],
-        model_name: Optional[str] = None,
-        provider_name: Optional[str] = None,
-    ):
-        """Configure streaming support for the main LLM.
-
-        Args:
-            llm (Union[BaseLLM, BaseChatModel]): The main LLM model instance.
-            model_name (Optional[str], optional): Optional model name for logging.
-            provider_name (Optional[str], optional): Optional provider name for logging.
-
-        """
-        if not self.config.streaming:
-            return
-
-        if hasattr(llm, "streaming"):
-            setattr(llm, "streaming", True)
-            self.main_llm_supports_streaming = True
-        else:
-            self.main_llm_supports_streaming = False
-            if model_name and provider_name:
-                log.warning(
-                    "Model %s from provider %s does not support streaming.",
-                    model_name,
-                    provider_name,
-                )
-            else:
-                log.warning("Provided main LLM does not support streaming.")
 
     def _init_llms(self):
         """
@@ -434,7 +409,6 @@ class LLMRails:
                 )
             self.runtime.register_action_param("llm", self.llm)
 
-            self._configure_main_llm_streaming(self.llm)
         else:
             # Otherwise, initialize the main LLM from the config
             main_model = next((model for model in self.config.models if model.type == "main"), None)
@@ -449,11 +423,6 @@ class LLMRails:
                 )
                 self.runtime.register_action_param("llm", self.llm)
 
-                self._configure_main_llm_streaming(
-                    self.llm,
-                    model_name=main_model.model,
-                    provider_name=main_model.engine,
-                )
             else:
                 log.warning("No main LLM specified in the config and no LLM provided via constructor.")
 
@@ -470,7 +439,9 @@ class LLMRails:
             try:
                 model_name = llm_config.model
                 if not model_name:
-                    raise ValueError("LLM Config model field not set")
+                    raise InvalidModelConfigurationError(
+                        f"`model` field must be set in model configuration: {llm_config.model_dump_json()}"
+                    )
 
                 provider_name = llm_config.engine
                 kwargs = self._prepare_model_kwargs(llm_config)
@@ -681,7 +652,9 @@ class LLMRails:
                                 user_message = prev_msg["content"]
                                 break
 
-                        if user_message:
+                        # If tool input rails are configured, process tool messages even without user message
+                        # This allows standalone tool message validation (e.g., in MCP gateway scenarios)
+                        if user_message or self.config.rails.tool_input.flows:
                             # If tool input rails are configured, group all tool messages
                             if self.config.rails.tool_input.flows:
                                 # Collect all tool messages for grouped processing
@@ -1179,7 +1152,7 @@ class LLMRails:
         if len(self.config.rails.output.flows) > 0 and (
             not self.config.rails.output.streaming or not self.config.rails.output.streaming.enabled
         ):
-            raise ValueError(
+            raise StreamingNotSupportedError(
                 "stream_async() cannot be used when output rails are configured but "
                 "rails.output.streaming.enabled is False. Either set "
                 "rails.output.streaming.enabled to True in your configuration, or use "
@@ -1193,8 +1166,9 @@ class LLMRails:
         messages: Optional[List[dict]] = None,
         options: Optional[Union[dict, GenerationOptions]] = None,
         state: Optional[Union[dict, State]] = None,
-        include_generation_metadata: Literal[False] = False,
+        include_metadata: Literal[False] = False,
         generator: Optional[AsyncIterator[str]] = None,
+        include_generation_metadata: Optional[bool] = None,
     ) -> AsyncIterator[str]: ...
 
     @overload
@@ -1204,8 +1178,9 @@ class LLMRails:
         messages: Optional[List[dict]] = None,
         options: Optional[Union[dict, GenerationOptions]] = None,
         state: Optional[Union[dict, State]] = None,
-        include_generation_metadata: Literal[True] = ...,
+        include_metadata: Literal[True] = ...,
         generator: Optional[AsyncIterator[str]] = None,
+        include_generation_metadata: Optional[bool] = None,
     ) -> AsyncIterator[Union[str, dict]]: ...
 
     def stream_async(
@@ -1214,10 +1189,20 @@ class LLMRails:
         messages: Optional[List[dict]] = None,
         options: Optional[Union[dict, GenerationOptions]] = None,
         state: Optional[Union[dict, State]] = None,
-        include_generation_metadata: Optional[bool] = False,
+        include_metadata: Optional[bool] = False,
         generator: Optional[AsyncIterator[str]] = None,
+        include_generation_metadata: Optional[bool] = None,
     ) -> AsyncIterator[Union[str, dict]]:
         """Simplified interface for getting directly the streamed tokens from the LLM."""
+
+        if include_generation_metadata is not None:
+            warnings.warn(
+                "include_generation_metadata is deprecated, use include_metadata instead. "
+                "It will be removed in version 0.22.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            include_metadata = include_generation_metadata
 
         self._validate_streaming_with_output_rails()
         # if an external generator is provided, use it directly
@@ -1234,7 +1219,7 @@ class LLMRails:
 
         self.explain_info = self._ensure_explain_info()
 
-        streaming_handler = StreamingHandler(include_generation_metadata=include_generation_metadata)
+        streaming_handler = StreamingHandler(include_metadata=include_metadata)
 
         # Create a properly managed task with exception handling
         async def _generation_task():
@@ -1430,6 +1415,109 @@ class LLMRails:
 
         loop = get_or_create_event_loop()
         return loop.run_until_complete(self.process_events_async(events, state, blocking))
+
+    async def check_async(
+        self,
+        messages: List[dict],
+        rail_types: Optional[List[RailType]] = None,
+    ) -> RailsResult:
+        """Run rails on messages based on their content (asynchronous).
+
+        When ``rail_types`` is not provided, automatically determines which rails
+        to run based on message roles:
+        - Only user messages: runs input rails
+        - Only assistant messages: runs output rails
+        - Both user and assistant messages: runs both input and output rails
+        - No user/assistant messages: logs warning and returns passing result
+
+        When ``rail_types`` is provided, runs exactly the specified rail types,
+        skipping the auto-detection logic.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' fields.
+                     Messages can contain any roles, but only user/assistant roles
+                     determine which rails execute when ``rail_types`` is not provided.
+            rails: Optional list of rail types to run, e.g.
+                  ``[RailType.INPUT]`` or ``[RailType.OUTPUT]``.
+                  When provided, overrides automatic detection.
+
+        Returns:
+            RailsResult containing:
+            - status: PASSED, MODIFIED, or BLOCKED
+            - content: The final content after rails processing
+            - rail: Name of the rail that blocked (if blocked)
+
+        Examples:
+            Check user input (auto-detected):
+                result = await rails.check_async([{"role": "user", "content": "Hello!"}])
+                if result.status == RailStatus.BLOCKED:
+                    print(f"Blocked by: {result.rail}")
+
+            Check bot output with context (auto-detected):
+                result = await rails.check_async([
+                    {"role": "user", "content": "Hello!"},
+                    {"role": "assistant", "content": "Hi there!"}
+                ])
+
+            Run only input rails explicitly:
+                result = await rails.check_async(messages, rail_types=[RailType.INPUT])
+        """
+        if rail_types is not None:
+            options: Optional[dict] = {"rails": [r.value for r in rail_types]}
+        else:
+            options = _determine_rails_from_messages(messages)
+
+        if options is None:
+            last_content = messages[-1].get("content", "") if messages else ""
+            return RailsResult(status=RailStatus.PASSED, content=last_content)
+
+        rails_to_run = options["rails"]
+        if "output" in rails_to_run:
+            original_content = _get_last_content_by_role(messages, "assistant")
+        else:
+            original_content = _get_last_content_by_role(messages, "user")
+
+        messages = _normalize_messages_for_rails(messages, rails_to_run)
+        options["log"] = {"activated_rails": True}
+
+        response = await self.generate_async(messages=messages, options=options)
+
+        if not isinstance(response, GenerationResponse):
+            raise RuntimeError(f"Expected GenerationResponse, got {type(response).__name__}")
+
+        blocking_rail = _get_blocking_rail(response)
+        result_content = _get_last_response_content(response)
+
+        if blocking_rail:
+            return RailsResult(status=RailStatus.BLOCKED, content=result_content, rail=blocking_rail)
+
+        if result_content != original_content:
+            return RailsResult(status=RailStatus.MODIFIED, content=result_content)
+        return RailsResult(status=RailStatus.PASSED, content=result_content)
+
+    def check(
+        self,
+        messages: List[dict],
+        rail_types: Optional[List[RailType]] = None,
+    ) -> RailsResult:
+        """Run rails on messages based on their content (synchronous).
+
+        This is a synchronous wrapper around check_async().
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' fields.
+            rails: Optional list of rail types to run. See check_async() for details.
+
+        Returns:
+            RailsResult containing status, content, and optional blocking rail name.
+        """
+        if check_sync_call_from_async_loop():
+            raise RuntimeError(
+                "You are using the sync `check` inside async code. You should replace with `await check_async(...)`."
+            )
+
+        loop = get_or_create_event_loop()
+        return loop.run_until_complete(self.check_async(messages, rail_types=rail_types))
 
     def register_action(self, action: Callable, name: Optional[str] = None) -> Self:
         """Register a custom action for the rails configuration."""
@@ -1754,3 +1842,58 @@ class LLMRails:
                 # yield the individual chunks directly from the buffer strategy
                 for chunk in user_output_chunks:
                     yield chunk
+
+
+def _determine_rails_from_messages(messages: List[dict]) -> Optional[dict]:
+    roles = {msg.get("role") for msg in reversed(messages)}
+    has_user = "user" in roles
+    has_assistant = "assistant" in roles
+
+    if not has_user and not has_assistant:
+        log.warning(
+            "check() called with no user or assistant messages. "
+            "Only system, context, or tool messages found. "
+            "Returning passing result without running rails."
+        )
+        return None
+
+    if has_user and has_assistant:
+        return {"rails": ["input", "output"]}
+    if has_user:
+        return {"rails": ["input"]}
+    return {"rails": ["output"]}
+
+
+def _normalize_messages_for_rails(
+    messages: List[dict],
+    rails: List[str],
+) -> List[dict]:
+    if rails == ["output"]:
+        has_user = any(msg.get("role") == "user" for msg in messages)
+        if not has_user:
+            return [{"role": "user", "content": ""}] + messages
+
+    return messages
+
+
+def _get_last_content_by_role(messages: List[dict], role: str) -> str:
+    for msg in reversed(messages):
+        if msg.get("role") == role:
+            return msg.get("content", "")
+    return ""
+
+
+def _get_blocking_rail(response: "GenerationResponse") -> Optional[str]:
+    if response.log and response.log.activated_rails:
+        for rail in response.log.activated_rails:
+            if rail.stop:
+                return rail.name
+    return None
+
+
+def _get_last_response_content(response: "GenerationResponse") -> str:
+    if isinstance(response.response, list) and response.response:
+        return response.response[-1].get("content", "")
+    if isinstance(response.response, str):
+        return response.response
+    return ""

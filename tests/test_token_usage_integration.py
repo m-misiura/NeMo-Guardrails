@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +16,10 @@
 """Integration tests for token usage tracking with streaming LLMs.
 
 Note about token usage testing:
-- In production, `stream_usage=True` is passed to ALL providers when streaming is enabled
-- providers that don't support this parameter will simply ignore it
-- for testing purposes, we simulate expected behavior based on known provider capabilities
-- the _TEST_PROVIDERS_WITH_TOKEN_USAGE_SUPPORT list in nemoguardrails.llm.types defines
-  which providers are known to support token usage reporting during streaming
-- test cases verify both supported and unsupported provider behavior
+- For testing purposes, we simulate expected behavior based on known provider capabilities
+- The _TEST_PROVIDERS_WITH_TOKEN_USAGE list in tests/utils.py defines which providers
+  are known to support token usage reporting
+- Test cases verify both supported and unsupported provider behavior
 """
 
 import pytest
@@ -257,52 +255,10 @@ async def test_token_usage_integration_multiple_calls(llm_calls_option):
 
 
 @pytest.mark.asyncio
-async def test_token_usage_not_tracked_without_streaming(llm_calls_option):
-    """Integration test verifying token usage is NOT tracked when streaming is disabled."""
-
-    config = RailsConfig.from_content(
-        config={
-            "models": [
-                {
-                    "type": "main",
-                    "engine": "openai",
-                    "model": "gpt-4",
-                }
-            ],
-            "streaming": False,
-        }
-    )
-
-    token_usage_data = [{"total_tokens": 15, "prompt_tokens": 8, "completion_tokens": 7}]
-
-    chat = TestChat(
-        config,
-        llm_completions=["Hello there!"],
-        streaming=False,
-        token_usage=token_usage_data,
-    )
-
-    result = await chat.app.generate_async(messages=[{"role": "user", "content": "Hi!"}], options=llm_calls_option)
-
-    assert isinstance(result, GenerationResponse)
-    assert result.response[0]["content"] == "Hello there!"
-
-    assert result.log is not None
-    assert result.log.llm_calls is not None
-    assert len(result.log.llm_calls) > 0
-
-    llm_call = result.log.llm_calls[0]
-    assert llm_call.total_tokens == 0
-    assert llm_call.prompt_tokens == 0
-    assert llm_call.completion_tokens == 0
-
-
-@pytest.mark.asyncio
 async def test_token_usage_not_set_for_unsupported_provider():
     """Integration test verifying token usage is NOT tracked for unsupported providers.
 
-    Even though stream_usage=True is passed to all providers,
-    providers that don't support it won't return token usage data.
+    Providers that don't support token usage reporting won't return token usage data.
     This test simulates that behavior using an 'unsupported' provider.
     """
 

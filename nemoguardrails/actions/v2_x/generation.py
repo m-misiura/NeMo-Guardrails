@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -149,9 +149,24 @@ class LLMGenerationActionsV2dotx(LLMGenerationActions):
         if self.instruction_flows_index is None:
             self.instruction_flows_index = self.flows_index
 
+    async def _ensure_flows_index(self):
+        if self.flows_index is None and self.config.flows:
+            async with self._init_lock:
+                if self.flows_index is None:
+                    await self._init_flows_index()
+
+    async def _ensure_instruction_flows_index(self):
+        if not hasattr(self, "instruction_flows_index") or self.instruction_flows_index is None:
+            async with self._init_lock:
+                if not hasattr(self, "instruction_flows_index") or self.instruction_flows_index is None:
+                    if self.config.flows:
+                        await self._init_flows_index()
+
     async def _collect_user_intent_and_examples(
         self, state: State, user_action: str, max_example_flows: int
     ) -> Tuple[List[str], str, bool]:
+        await self._ensure_user_message_index()
+
         # We search for the most relevant similar user intents
         examples = ""
         potential_user_intents = []
@@ -428,13 +443,12 @@ class LLMGenerationActionsV2dotx(LLMGenerationActions):
         generation_options: Optional[GenerationOptions] = generation_options_var.get()
 
         streaming_handler: Optional[StreamingHandler] = streaming_handler_var.get()
-        custom_callback_handlers = [streaming_handler] if streaming_handler else None
 
         generation_llm_params = generation_options and generation_options.llm_params
         text = await llm_call(
             llm,
             user_message,
-            custom_callback_handlers=custom_callback_handlers,
+            streaming_handler=streaming_handler,
             llm_params=generation_llm_params,
         )
 
@@ -478,6 +492,8 @@ class LLMGenerationActionsV2dotx(LLMGenerationActions):
         llm: Optional[BaseLLM] = None,
     ) -> dict:
         """Generate a flow from the provided instructions."""
+
+        await self._ensure_instruction_flows_index()
 
         if self.instruction_flows_index is None:
             raise RuntimeError("No instruction flows index has been created.")
@@ -549,6 +565,9 @@ class LLMGenerationActionsV2dotx(LLMGenerationActions):
     ) -> str:
         """Generate a flow from the provided NAME."""
 
+        await self._ensure_flows_index()
+        await self._ensure_instruction_flows_index()
+
         if self.flows_index is None:
             raise RuntimeError("No flows index has been created.")
 
@@ -608,6 +627,9 @@ class LLMGenerationActionsV2dotx(LLMGenerationActions):
 
         if temperature is None:
             temperature = 0.0
+
+        await self._ensure_flows_index()
+        await self._ensure_instruction_flows_index()
 
         if self.instruction_flows_index is None:
             raise RuntimeError("No instruction flows index has been created.")
@@ -734,6 +756,8 @@ class LLMGenerationActionsV2dotx(LLMGenerationActions):
         """
         # Use action specific llm if registered else fallback to main llm
         generation_llm: Optional[Union[BaseLLM, BaseChatModel]] = llm if llm else self.llm
+
+        await self._ensure_flows_index()
 
         # We search for the most relevant flows.
         examples = ""

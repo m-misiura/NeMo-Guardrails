@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,6 @@ import logging
 import random
 import re
 import sys
-import threading
 from dataclasses import asdict
 from functools import lru_cache
 from time import time
@@ -59,12 +58,10 @@ from nemoguardrails.llm.prompts import get_prompt
 from nemoguardrails.llm.taskmanager import LLMTaskManager
 from nemoguardrails.llm.types import Task
 from nemoguardrails.logging.explain import LLMCallInfo
-from nemoguardrails.patch_asyncio import check_sync_call_from_async_loop
 from nemoguardrails.rails.llm.config import EmbeddingSearchProvider, RailsConfig
 from nemoguardrails.rails.llm.options import GenerationOptions
 from nemoguardrails.streaming import StreamingHandler
 from nemoguardrails.utils import (
-    get_or_create_event_loop,
     new_event_dict,
     new_uuid,
     safe_eval,
@@ -99,16 +96,12 @@ class LLMGenerationActions:
         self.user_message_index = None
         self.bot_message_index = None
         self.flows_index = None
+        self._init_lock = asyncio.Lock()
 
         self.get_embedding_search_provider_instance = get_embedding_search_provider_instance
 
-        # There are still some edge cases not covered by nest_asyncio.
-        # Using a separate thread always for now.
-        loop = get_or_create_event_loop()
-        if True or check_sync_call_from_async_loop():
-            t = threading.Thread(target=asyncio.run, args=(self.init(),))
-            t.start()
-            t.join()
+        if self.config.colang_version == "2.x":
+            self._process_flows()
 
         self.llm_task_manager = llm_task_manager
 
@@ -118,17 +111,6 @@ class LLMGenerationActions:
         # If set, in passthrough mode, this function will be used instead of
         # calling the LLM with the user input.
         self.passthrough_fn: Optional[Callable[..., Awaitable[str]]] = None
-
-    async def init(self):
-        # For Colang 2.x we need to do some initial processing
-        if self.config.colang_version == "2.x":
-            self._process_flows()
-
-        await asyncio.gather(
-            self._init_user_message_index(),
-            self._init_bot_message_index(),
-            self._init_flows_index(),
-        )
 
     def _extract_user_message_example(self, flow: Flow) -> None:
         """Heuristic to extract user message examples from a flow."""
@@ -247,6 +229,9 @@ class LLMGenerationActions:
         if not self.bot_messages:
             return
 
+        if not self.user_messages:
+            return
+
         items = []
         for intent, utterances in self.bot_messages.items():
             for text in utterances:
@@ -296,6 +281,24 @@ class LLMGenerationActions:
 
         # NOTE: this should be very fast, otherwise needs to be moved to separate thread.
         await self.flows_index.build()
+
+    async def _ensure_user_message_index(self):
+        if self.user_message_index is None and self.user_messages:
+            async with self._init_lock:
+                if self.user_message_index is None:
+                    await self._init_user_message_index()
+
+    async def _ensure_bot_message_index(self):
+        if self.bot_message_index is None and self.bot_messages and self.user_messages:
+            async with self._init_lock:
+                if self.bot_message_index is None:
+                    await self._init_bot_message_index()
+
+    async def _ensure_flows_index(self):
+        if self.flows_index is None and self.config.flows:
+            async with self._init_lock:
+                if self.flows_index is None:
+                    await self._init_flows_index()
 
     def _get_general_instructions(self):
         """Helper to extract the general instruction."""
@@ -369,6 +372,8 @@ class LLMGenerationActions:
         generation_llm: Optional[Union[BaseLLM, BaseChatModel]] = llm if llm else self.llm
 
         streaming_handler = streaming_handler_var.get()
+
+        await self._ensure_user_message_index()
 
         # TODO: check for an explicit way of enabling the canonical form detection
 
@@ -507,12 +512,10 @@ class LLMGenerationActions:
 
                     streaming_handler: Optional[StreamingHandler] = streaming_handler_var.get()
 
-                    custom_callback_handlers = [streaming_handler] if streaming_handler else None
-
                     text = await llm_call(
                         generation_llm,
                         prompt,
-                        custom_callback_handlers=custom_callback_handlers,
+                        streaming_handler=streaming_handler,
                         llm_params=llm_params,
                     )
                     text = self.llm_task_manager.parse_task_output(Task.GENERAL, output=text)
@@ -537,12 +540,11 @@ class LLMGenerationActions:
 
                 generation_options: Optional[GenerationOptions] = generation_options_var.get()
                 llm_params = (generation_options and generation_options.llm_params) or {}
-                custom_callback_handlers = [streaming_handler] if streaming_handler else None
 
                 result = await llm_call(
                     generation_llm,
                     prompt,
-                    custom_callback_handlers=custom_callback_handlers,
+                    streaming_handler=streaming_handler,
                     stop=["User:"],
                     llm_params=llm_params,
                 )
@@ -597,7 +599,7 @@ class LLMGenerationActions:
         return final_results[0:max_results]
 
     @action(is_system_action=True)
-    async def generate_next_step(self, events: List[dict], llm: Optional[BaseLLM] = None):
+    async def generate_next_steps(self, events: List[dict], llm: Optional[BaseLLM] = None):
         """Generate the next step in the current conversation flow.
 
         Currently, only generates a next step after a user intent.
@@ -620,6 +622,8 @@ class LLMGenerationActions:
                 return ActionResult(events=[bot_intent_event])
 
             user_intent = event["intent"]
+
+            await self._ensure_flows_index()
 
             # We search for the most relevant similar flows
             examples = ""
@@ -898,14 +902,13 @@ class LLMGenerationActions:
 
                     gen_options: Optional[GenerationOptions] = generation_options_var.get()
                     llm_params = (gen_options and gen_options.llm_params) or {}
-                    custom_callback_handlers = [streaming_handler] if streaming_handler else None
 
                     if not prompt:
                         raise RuntimeError("No prompt found to generate bot message")
                     result = await llm_call(
                         generation_llm,
                         prompt,
-                        custom_callback_handlers=custom_callback_handlers,
+                        streaming_handler=streaming_handler,
                         llm_params=llm_params,
                     )
 
@@ -918,6 +921,8 @@ class LLMGenerationActions:
             else:
                 # Otherwise, we go through the process of creating the altered prompt,
                 # which includes examples, relevant chunks, etc.
+
+                await self._ensure_bot_message_index()
 
                 # We search for the most relevant similar bot utterance
                 examples = ""
@@ -953,12 +958,11 @@ class LLMGenerationActions:
 
                 generation_options: Optional[GenerationOptions] = generation_options_var.get()
                 llm_params = (generation_options and generation_options.llm_params) or {}
-                custom_callback_handlers = [streaming_handler] if streaming_handler else None
 
                 result = await llm_call(
                     generation_llm,
                     prompt,
-                    custom_callback_handlers=custom_callback_handlers,
+                    streaming_handler=streaming_handler,
                     llm_params=llm_params,
                 )
 
@@ -1042,6 +1046,8 @@ class LLMGenerationActions:
         if not var_name:
             var_name = last_event["action_result_key"]
 
+        await self._ensure_flows_index()
+
         # We search for the most relevant flows.
         examples = ""
         if self.flows_index:
@@ -1118,6 +1124,10 @@ class LLMGenerationActions:
         generation_llm: Optional[Union[BaseLLM, BaseChatModel]] = llm if llm else self.llm
 
         streaming_handler = streaming_handler_var.get()
+
+        await self._ensure_user_message_index()
+        await self._ensure_bot_message_index()
+        await self._ensure_flows_index()
 
         if self.config.user_messages:
             # TODO: based on the config we can use a specific canonical forms model
@@ -1247,7 +1257,7 @@ class LLMGenerationActions:
                     llm_call(
                         generation_llm,
                         prompt,
-                        custom_callback_handlers=[_streaming_handler],
+                        streaming_handler=_streaming_handler,
                         stop=["\nuser ", "\nUser "],
                         llm_params={"temperature": self.config.lowest_temperature},
                     )

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +15,8 @@
 
 import asyncio
 import logging
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
-from uuid import UUID
-
-from langchain_core.callbacks.base import AsyncCallbackHandler
-from langchain_core.messages import AIMessageChunk, BaseMessage
-from langchain_core.outputs import ChatGenerationChunk, GenerationChunk, LLMResult
+import warnings
+from typing import Any, AsyncIterator, Dict, Optional, Union
 
 from nemoguardrails.utils import new_uuid
 
@@ -30,20 +26,30 @@ log = logging.getLogger(__name__)
 END_OF_STREAM = object()
 
 
-class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
-    """Streaming async handler.
+class StreamingHandler(AsyncIterator):
+    """Provider-agnostic streaming handler with prefix/suffix/stop handling.
 
-    Implements the LangChain AsyncCallbackHandler so it can be notified of new tokens.
-    It also implements the AsyncIterator interface so it can be used directly to stream
-    back the response.
+    Implements AsyncIterator interface so it can be used directly to stream
+    back the response. Chunks are pushed via push_chunk() and consumed via
+    async iteration.
     """
 
     def __init__(
         self,
         enable_print: bool = False,
         enable_buffer: bool = False,
-        include_generation_metadata: Optional[bool] = False,
+        include_metadata: Optional[bool] = False,
+        include_generation_metadata: Optional[bool] = None,
     ):
+        if include_generation_metadata is not None:
+            warnings.warn(
+                "include_generation_metadata is deprecated, use include_metadata instead. "
+                "It will be removed in version 0.22.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            include_metadata = include_generation_metadata
+
         # A unique id for the stream handler
         self.uid = new_uuid()
 
@@ -77,14 +83,11 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
         # If set, the chunk will be piped to the specified handler rather than added to the queue or printed
         self.pipe_to = None
 
-        self.first_token = True
-
         # The stop chunks
         self.stop = []
 
-        # Generation metadata handling
-        self.include_generation_metadata = include_generation_metadata
-        self.current_generation_info = {}
+        self.include_metadata = include_metadata
+        self.current_metadata = {}
 
     def set_pattern(self, prefix: Optional[str] = None, suffix: Optional[str] = None):
         """Sets the pattern that is expected.
@@ -94,7 +97,7 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
         self.prefix = prefix
         self.suffix = suffix
 
-    def set_pipe_to(self, another_handler):
+    def set_pipe_to(self, another_handler: "StreamingHandler"):
         self.pipe_to = another_handler
 
     async def wait(self):
@@ -147,7 +150,8 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
                     break
 
                 if isinstance(element, dict):
-                    if element is not None and (element.get("text") is END_OF_STREAM):
+                    if element.get("text") is END_OF_STREAM:
+                        element["text"] = ""
                         yield element
                         break
                 yield element
@@ -165,7 +169,7 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
             raise StopAsyncIteration
 
         if isinstance(element, dict):
-            if element is not None and (element.get("text") is END_OF_STREAM):
+            if element.get("text") is END_OF_STREAM:
                 raise StopAsyncIteration
             return element
         else:
@@ -174,7 +178,7 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
     async def _process(
         self,
         chunk: Union[str, object],
-        generation_info: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Process a chunk of text.
 
@@ -182,8 +186,8 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
         Otherwise, update the full completion, check for stop tokens, and enqueue the chunk.
         """
 
-        if self.include_generation_metadata and generation_info:
-            self.current_generation_info = generation_info
+        if self.include_metadata and metadata:
+            self.current_metadata.update(metadata)
 
         if self.enable_buffer:
             if chunk is not END_OF_STREAM:
@@ -228,22 +232,16 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
                 # we only want to filter out empty strings that are created during suffix processing,
                 # not ones directly pushed by the user
                 if chunk is not None:
-                    # process all valid chunks, including empty strings directly from the user
-                    if self.include_generation_metadata:
-                        if chunk is not END_OF_STREAM:
-                            await self.queue.put(
-                                {
-                                    "text": chunk,
-                                    "generation_info": self.current_generation_info.copy(),
-                                }
-                            )
-                        else:
-                            await self.queue.put(
-                                {
-                                    "text": END_OF_STREAM,
-                                    "generation_info": self.current_generation_info.copy(),
-                                }
-                            )
+                    if self.include_metadata:
+                        chunk_dict = {"text": chunk if chunk is not END_OF_STREAM else END_OF_STREAM}
+                        if chunk is END_OF_STREAM:
+                            metadata = self.current_metadata.copy() if self.current_metadata else {}
+                            metadata.setdefault("response_metadata", None)
+                            metadata.setdefault("usage_metadata", None)
+                            chunk_dict["metadata"] = metadata
+                        elif self.current_metadata:
+                            chunk_dict["metadata"] = self.current_metadata.copy()
+                        await self.queue.put(chunk_dict)
                     else:
                         await self.queue.put(chunk)
 
@@ -254,26 +252,16 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
 
     async def push_chunk(
         self,
-        chunk: Union[str, GenerationChunk, AIMessageChunk, ChatGenerationChunk, None],
-        generation_info: Optional[Dict[str, Any]] = None,
+        chunk: Union[str, None],
+        metadata: Optional[Dict[str, Any]] = None,
     ):
-        """Push a new chunk to the stream."""
+        """Push a new string chunk to the stream.
 
-        # if generation_info is not explicitly passed,
-        # try to get it from the chunk itself if it's a GenerationChunk or ChatGenerationChunk
-        if generation_info is None:
-            if isinstance(chunk, (GenerationChunk, ChatGenerationChunk)) and hasattr(chunk, "generation_info"):
-                if chunk.generation_info is not None:
-                    generation_info = chunk.generation_info.copy()
-
-        if isinstance(chunk, GenerationChunk):
-            chunk = chunk.text
-        elif isinstance(chunk, AIMessageChunk):
-            chunk = chunk.content
-        elif isinstance(chunk, ChatGenerationChunk):
-            chunk = chunk.text
-        elif chunk is None:
-            # replace None with the END_OF_STREAM marker
+        Args:
+            chunk: String chunk to push, None to signal end of stream, or END_OF_STREAM sentinel.
+            metadata: Optional metadata about the generation.
+        """
+        if chunk is None:
             chunk = END_OF_STREAM
         elif chunk is END_OF_STREAM:
             # already the correct marker, no conversion needed
@@ -282,14 +270,14 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
             # empty string is a valid chunk and should be processed normally
             pass
         else:
-            raise Exception(f"Unsupported chunk type: {chunk.__class__.__name__}")
+            raise TypeError(f"StreamingHandler.push_chunk() expects str, got {type(chunk).__name__}")
 
         if self.streaming_finished_event.is_set():
             log.info(f"{self.uid[0:3]} - CHUNK after finish: {chunk}")
             return
 
-        if self.include_generation_metadata and generation_info:
-            self.current_generation_info = generation_info
+        if self.include_metadata and metadata:
+            self.current_metadata.update(metadata)
 
         # Process prefix: accumulate until the expected prefix is received, then remove it.
         if self.prefix:
@@ -320,9 +308,7 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
                         skip_processing = True
                         break
 
-            if skip_processing and chunk is not END_OF_STREAM and chunk != "":
-                # We do nothing in this case. The suffix/stop chunks will be removed when
-                # the generation ends and if there's something left, will be processed then.
+            if skip_processing and chunk is not END_OF_STREAM:
                 return
             else:
                 if chunk is END_OF_STREAM:
@@ -331,69 +317,17 @@ class StreamingHandler(AsyncCallbackHandler, AsyncIterator):
 
                 # only process the current_chunk if it's not empty
                 if self.current_chunk:
-                    await self._process(self.current_chunk, generation_info)
+                    await self._process(self.current_chunk, metadata)
                     self.current_chunk = ""
 
                 # if this is the end of stream, pass it through after processing the current chunk
                 if chunk is END_OF_STREAM:
-                    await self._process(END_OF_STREAM, generation_info)
+                    await self._process(END_OF_STREAM, metadata)
         else:
-            await self._process(chunk, generation_info)
+            await self._process(chunk, metadata)
 
-    async def on_chat_model_start(
-        self,
-        serialized: Dict[str, Any],
-        messages: List[List[BaseMessage]],
-        *,
-        run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> Any:
-        self.current_chunk = ""
-
-    async def on_llm_new_token(
-        self,
-        token: str,
-        *,
-        chunk: Optional[Union[GenerationChunk, ChatGenerationChunk]] = None,
-        run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[List[str]] = None,
-        **kwargs: Any,
-    ) -> None:
-        """Run on new LLM token. Only available when streaming is enabled."""
-        # Log the first token if it's empty to help with debugging
-        if self.first_token and token == "":
-            log.debug(f"{self.uid[0:3]} - Received empty first token from LLM")
-
-        # set first_token to False regardless of token content
-        # we always process tokens, even empty ones
-        if self.first_token:
-            self.first_token = False
-
-        generation_info = None
-        if chunk and hasattr(chunk, "generation_info"):
-            if chunk.generation_info is not None:
-                generation_info = chunk.generation_info.copy()
-            else:
-                generation_info = {}
-        else:
-            generation_info = {}
-
-        await self.push_chunk(token if chunk is None else chunk, generation_info=generation_info)
-
-    async def on_llm_end(
-        self,
-        response: LLMResult,
-        *,
-        run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[List[str]] = None,
-        **kwargs: Any,
-    ) -> None:
-        """Run when LLM ends running."""
+    async def finish(self):
+        """Signal end of stream."""
         if self.current_chunk:
             if self.suffix and self.current_chunk.endswith(self.suffix):
                 self.current_chunk = self.current_chunk[: -1 * len(self.suffix)]

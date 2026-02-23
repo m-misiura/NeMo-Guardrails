@@ -1,144 +1,163 @@
-# Installation Guide
+---
+title:
+  page: Install the NeMo Guardrails Library
+  nav: Installation
+description: Install NeMo Guardrails with pip, configure your environment, and verify the installation.
+topics:
+- Get Started
+- AI Safety
+tags:
+- Installation
+- Python
+- pip
+- Docker
+- Setup
+content:
+  type: get_started
+  difficulty: technical_beginner
+  audience:
+  - engineer
+  - AI Engineer
+---
 
-This guide walks you through the following steps to install the NeMo Guardrails SDK:
+# Install the NeMo Guardrails Library
 
-1. Setting up a fresh virtual environment.
-2. Installing using `pip`.
-3. Installing from Source Code.
-4. Optional dependencies.
-5. Using Docker.
+Follow these steps to install the NeMo Guardrails library.
 
-## Requirements
+## Prerequisites
 
-Review the following requirements to install the NeMo Guardrails SDK.
+Verify your system meets the following requirements before installation.
 
-### Hardware Requirements
+| Requirement | Details |
+|-------------|---------|
+| **Operating System** | Windows, Linux, MacOS |
+| **Python** | 3.10, 3.11, 3.12, or 3.13 |
+| **Hardware** | 1 CPU with 4GB RAM. The NeMo Guardrails library runs on CPU. External models may require GPUs, which may be deployed separately to the library |
 
-The NeMo Guardrails SDK runs on CPUs. This SDK adds a layer to manage processes between your application front-end and the backend LLM and does not require any GPUs.
+## Quick Start
 
-### Software Requirements
+Use the following steps to install the NeMo Guardrails library in a virtual environment.
 
-- Python 3.10, 3.11, 3.12 or 3.13
+1. Create and activate a virtual environment:
 
-### Additional Dependencies
+   ::::{tab-set}
 
-NeMo Guardrails uses [annoy](https://github.com/spotify/annoy), which is a C++ library with Python bindings. To install it, you need to have a valid C++ runtime on your computer.
-Most systems already have installed a C++ runtime. If the **annoy** installation fails due to a missing C++ runtime, you can install a C++ runtime as follows:
+   :::{tab-item} Linux/macOS
 
-#### Installing a C++ runtime on Linux, Mac, or Unix-based OS
-
-  1. Install `gcc` and `g++` using `apt-get install gcc g++`.
-  2. Update the following environment variables: `export CC=`*path_to_clang* and `export CXX=`*path_to_clang* (usually, *path_to_clang* is */usr/bin/clang*).
-  3. In some cases, you might also need to install the `python-dev` package using `apt-get install python-dev` (or `apt-get install python3-dev`). Check out this [thread](https://stackoverflow.com/questions/21530577/fatal-error-python-h-no-such-file-or-directory) if the error persists.
-
-#### Installing a C++ runtime on Windows
-
-Install the [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). This installs Microsoft Visual C++ (version 14.0 or greater is required by the latest version of **annoy**).
-
-## Setting up a virtual environment
-
-To experiment with NeMo Guardrails from scratch, use a fresh virtual environment. Otherwise, you can skip to the following section.
-
-### Setting up a virtual environment on Linux, Mac, or Unix-based OS
-
-1. Create a folder, such as *my_assistant*, for your project.
-
- ```sh
- mkdir my_assistant
- cd my_assistant
- ```
-
-2. Create a virtual environment.
-
- ```sh
- python3 -m venv venv
- ```
-
-3. Activate the virtual environment.
-
- ```sh
- source venv/bin/activate
- ```
-
-### Setting up a virtual environment on Windows
-
-1. Open a new CMD prompt (Windows Key + R, **cmd.exe**)
-2. Install **virtualenv** using the command `pip install virtualenv`
-3. Check that **virtualenv** is installed using the command `pip --version`.
-4. Install **virtualenvwrapper-win** using the command `pip install virtualenvwrapper-win`.
-
-Use the `mkvirtualenv` *name* command to activate a new virtual environment called *name*.
-
-## Install NeMo Guardrails
-
-Install NeMo Guardrails using **pip**:
-
- ```sh
- pip install nemoguardrails
- ```
-
-## Installing from source code
-
-NeMo Guardrails is under active development and the main branch always contains the latest development version. To install from source:
-
-1. Clone the repository:
-
-   ```sh
-   git clone https://github.com/NVIDIA/NeMo-Guardrails.git
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
    ```
 
-2. Install the package locally:
+   :::
 
-   ```sh
-   cd NeMo-Guardrails
-   pip install -e .
+   :::{tab-item} Windows (Git Bash)
+
+   ```bash
+   python -m venv .venv
+   source .venv/Scripts/activate
    ```
 
-## Extra dependencies
+   :::
 
-The `nemoguardrails` package also defines the following extra dependencies:
+   ::::
 
-- `dev`: packages required by some extra Guardrails features for developers, such as the **autoreload** feature.
-- `eval`: packages used for the Guardrails [evaluation tools](../../nemoguardrails/evaluate/README.md).
-- `openai`: installs the latest `openai` package supported by NeMo Guardrails.
-- `sdd`: packages used by the [sensitive data detector](../user-guides/guardrails-library.md#sensitive-data-detection) integrated in NeMo Guardrails.
-- `all`: installs all extra packages.
+1. Install the NeMo Guardrails library with support for NVIDIA-hosted models. Set `NVIDIA_API_KEY` to your personal API key generated on [build.nvidia.com](https://build.nvidia.com/).
 
-To keep the footprint of `nemoguardrails` as small as possible, these are not installed by default. To install any of the extra dependency you can use **pip** as well. For example, to install the `dev` extra dependencies, run the following command:
+   ```bash
+   pip install "nemoguardrails[nvidia]"
+   ```
 
-```sh
-> pip install nemoguardrails[dev]
+1. Set up an environment variable for your NVIDIA API key.
+
+   ```bash
+   export NVIDIA_API_KEY="your-nvidia-api-key"
+   ```
+
+   This is required to access NVIDIA-hosted models on [build.nvidia.com](https://build.nvidia.com). The tutorials and example configurations ([examples/configs](https://github.com/NVIDIA-NeMo/Guardrails/tree/develop/examples/configs)) in this library include configurations that use NVIDIA-hosted models.
+
+## Alternative Installation Methods
+
+Install the NeMo Guardrails library from source using pip or Poetry. Choose this method if you want to contribute to the library or use the latest development version.
+
+::::{tab-set}
+
+:::{tab-item} pip
+
+```bash
+git clone https://github.com/NVIDIA-NeMo/Guardrails.git nemoguardrails
+cd nemoguardrails
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
-## Optional dependencies
+:::
 
-```{warning}
-If pip fails to resolve dependencies when running `pip install nemoguardrails[all]`, you should specify additional constraints directly in the `pip install` command.
+:::{tab-item} Poetry
 
-Example Command:
-
-```sh
-pip install "nemoguardrails[all]" "pandas>=1.4.0,<3"
+```bash
+git clone https://github.com/NVIDIA-NeMo/Guardrails.git nemoguardrails
+cd nemoguardrails
+python -m venv .venv
+source .venv/bin/activate
+poetry install --extras "nvidia"
 ```
 
-To use OpenAI, just use the `openai` extra dependency that ensures that all required packages are installed.
-Make sure the `OPENAI_API_KEY` environment variable is set,
-as shown in the following example, where *YOUR_KEY* is your OpenAI key.
+When using Poetry, prefix CLI commands with `poetry run`:
 
- ```sh
- pip install nemoguardrails[openai]
- export OPENAI_API_KEY=YOUR_KEY
+```bash
+poetry run nemoguardrails server --config examples/configs
 ```
 
-Some NeMo Guardrails LLMs and features have specific installation requirements, including a more complex set of steps. For example, [AlignScore](../user-guides/advanced/align_score_deployment.md) fact-checking, using [Llama-2](../../examples/configs/llm/hf_pipeline_llama2/README.md) requires two additional packages.
-For each feature or LLM example, check the readme file associated with it.
+:::
 
-## Using Docker
+::::
 
-NeMo Guardrails can also be used through Docker. For details on how to build and use the Docker image see [NeMo Guardrails with Docker](../user-guides/advanced/using-docker.md).
+## Extra Dependencies
 
-## What's next?
+You can install the NeMo Guardrails library with optional extra packages to add useful functionalities. The table below shows a comprehensive list.
 
-- Check out the [Getting Started Guide](../getting-started/README.md) and start with the ["Hello World" example](../getting-started/1-hello-world/README.md).
-- Explore more examples in the [examples](https://github.com/NVIDIA/NeMo-Guardrails/tree/develop/examples) folder.
-- Review the [User Guides](../README.md).
+| Extra | Description |
+|-------|-------------|
+| `nvidia` | NVIDIA-hosted model integration through [build.nvidia.com](https://build.nvidia.com/) |
+| `openai` | OpenAI-hosted model integration |
+| `sdd` | [Sensitive data detection](../configure-rails/guardrail-catalog.md#presidio-based-sensitive-data-detection) using Presidio |
+| `eval` | [Evaluation tools](../evaluation/index.rst) for testing guardrails |
+| `tracing` | OpenTelemetry tracing support |
+| `gcp` | Google Cloud Platform language services |
+| `jailbreak` | YARA-based jailbreak detection heuristics |
+| `multilingual` | Language detection for multilingual content |
+| `all` | All optional packages |
+
+Some features such as [AlignScore](../user-guides/community/alignscore.md) have additional requirements. See the feature documentation for details.
+
+## Docker
+
+You can run the NeMo Guardrails library in a Docker container. For containerized deployment, see [NeMo Guardrails with Docker](../deployment/using-docker.md).
+
+## Troubleshooting Installation Issues
+
+Use the following information to resolve common installation issues.
+
+### C++ Runtime Errors
+
+The library uses [annoy](https://github.com/spotify/annoy), which requires a C++ compiler. If installation fails:
+
+::::{tab-set}
+
+:::{tab-item} Linux/macOS
+
+```bash
+apt-get install gcc g++ python3-dev
+```
+
+:::
+
+:::{tab-item} Windows
+
+Install [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (version 14.0 or greater).
+
+:::
+
+::::

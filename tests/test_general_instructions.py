@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -158,7 +158,7 @@ async def test_search_flows_index_is_none():
 
 
 @pytest.mark.asyncio
-async def test_generate_next_step_empty_event_list():
+async def test_generate_next_steps_empty_event_list():
     """Check if we try and search the flows index when None we get None back"""
 
     config = RailsConfig(
@@ -175,7 +175,7 @@ async def test_generate_next_step_empty_event_list():
     )
 
     with pytest.raises(RuntimeError, match="No last user intent found from which to generate next step"):
-        _ = await actions.generate_next_step(events=[])
+        _ = await actions.generate_next_steps(events=[])
 
 
 #

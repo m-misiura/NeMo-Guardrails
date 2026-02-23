@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -77,11 +77,29 @@ To get more details on the LLM calls that were executed, including the raw respo
 
 """
 
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, root_validator
 
 from nemoguardrails.logging.explain import LLMCallInfo
+
+
+class RailType(str, Enum):
+    INPUT = "input"
+    OUTPUT = "output"
+
+
+class RailStatus(str, Enum):
+    PASSED = "passed"
+    MODIFIED = "modified"
+    BLOCKED = "blocked"
+
+
+class RailsResult(BaseModel):
+    status: RailStatus = Field(description="Status of the rails check: passed, modified, or blocked.")
+    content: str = Field(description="The content after rails processing.")
+    rail: Optional[str] = Field(default=None, description="Name of the rail that blocked the content.")
 
 
 class GenerationLogOptions(BaseModel):

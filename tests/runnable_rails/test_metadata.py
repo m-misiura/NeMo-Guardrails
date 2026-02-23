@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -385,11 +385,11 @@ class TestMetadataPreservation:
             chunks = [
                 {
                     "text": "Hello ",
-                    "generation_info": {"model": "test-model", "finish_reason": "stop"},
+                    "metadata": {"model": "test-model", "finish_reason": "stop"},
                 },
                 {
                     "text": "world!",
-                    "generation_info": {"model": "test-model", "finish_reason": "stop"},
+                    "metadata": {"model": "test-model", "finish_reason": "stop"},
                 },
             ]
             for chunk in chunks:
@@ -417,8 +417,8 @@ class TestMetadataPreservation:
 
         async def mock_stream(*args, **kwargs):
             chunks = [
-                {"text": "Async ", "generation_info": {"model": "test-model"}},
-                {"text": "stream!", "generation_info": {"model": "test-model"}},
+                {"text": "Async ", "metadata": {"model": "test-model"}},
+                {"text": "stream!", "metadata": {"model": "test-model"}},
             ]
             for chunk in chunks:
                 yield chunk

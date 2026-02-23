@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,7 @@
 
 import logging
 import re
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, NoReturn, Optional, Sequence, Union
 
 from langchain_core.callbacks.base import AsyncCallbackHandler, BaseCallbackManager
 from langchain_core.language_models import BaseLanguageModel
@@ -30,23 +30,28 @@ from nemoguardrails.context import (
     reasoning_trace_var,
     tool_calls_var,
 )
+from nemoguardrails.exceptions import LLMCallException
 from nemoguardrails.integrations.langchain.message_utils import dicts_to_messages
 from nemoguardrails.logging.callbacks import logging_callbacks
 from nemoguardrails.logging.explain import LLMCallInfo
 
+if TYPE_CHECKING:
+    from nemoguardrails.streaming import StreamingHandler
+
 logger = logging.getLogger(__name__)
 
-
-class LLMCallException(Exception):
-    """A wrapper around the LLM call invocation exception.
-
-    This is used to propagate the exception out of the `generate_async` call (the default behavior is to
-    catch it and return an "Internal server error." message.
-    """
-
-    def __init__(self, inner_exception: Any):
-        super().__init__(f"LLM Call Exception: {str(inner_exception)}")
-        self.inner_exception = inner_exception
+# Since different providers have different attributes for the base URL, we'll use this list
+# to attempt to extract the base URL from a `BaseLanguageModel` instance.
+BASE_URL_ATTRIBUTES = [
+    "base_url",
+    "endpoint_url",
+    "server_url",
+    "azure_endpoint",
+    "openai_api_base",
+    "api_base",
+    "api_host",
+    "endpoint",
+]
 
 
 def _infer_provider_from_module(llm: BaseLanguageModel) -> Optional[str]:
@@ -136,6 +141,35 @@ def _infer_model_name(llm: BaseLanguageModel):
     return "unknown"
 
 
+def _filter_params_for_openai_reasoning_models(llm: BaseLanguageModel, llm_params: Optional[dict]) -> Optional[dict]:
+    """Filter out unsupported parameters for OpenAI reasoning models.
+
+    OpenAI reasoning models (o1, o3, gpt-5 excluding gpt-5-chat) only support
+    temperature=1. When using .bind() with other temperature values, the API
+    returns an error. This function removes the temperature parameter for these
+    models to allow the API default to apply.
+
+    See: https://github.com/langchain-ai/langchain/blob/master/libs/partners/openai/langchain_openai/chat_models/base.py
+    """
+    if not llm_params or "temperature" not in llm_params:
+        return llm_params
+
+    model_name = _infer_model_name(llm).lower()
+
+    is_openai_reasoning_model = (
+        model_name.startswith("o1")
+        or model_name.startswith("o3")
+        or (model_name.startswith("gpt-5") and "chat" not in model_name)
+    )
+
+    if is_openai_reasoning_model:
+        filtered = llm_params.copy()
+        filtered.pop("temperature", None)
+        return filtered
+
+    return llm_params
+
+
 async def llm_call(
     llm: Optional[BaseLanguageModel],
     prompt: Union[str, List[dict]],
@@ -144,8 +178,12 @@ async def llm_call(
     stop: Optional[List[str]] = None,
     custom_callback_handlers: Optional[Sequence[AsyncCallbackHandler]] = None,
     llm_params: Optional[dict] = None,
+    streaming_handler: Optional["StreamingHandler"] = None,
 ) -> str:
     """Calls the LLM with a prompt and returns the generated text.
+
+    If streaming_handler is provided, uses astream() to push chunks to the handler
+    as they arrive. The handler can be iterated over concurrently by other code.
 
     Args:
         llm: The language model instance to use
@@ -153,28 +191,85 @@ async def llm_call(
         model_name: Optional model name for tracking
         model_provider: Optional model provider for tracking
         stop: Optional list of stop tokens
-        custom_callback_handlers: Optional list of callback handlers
+        custom_callback_handlers: Optional list of callback handlers (not used when streaming; logging callbacks remain active)
         llm_params: Optional configuration dictionary to pass to the LLM (e.g., temperature, max_tokens)
+        streaming_handler: Optional StreamingHandler to receive streaming chunks
 
     Returns:
         The generated text response
     """
     if llm is None:
-        raise LLMCallException("No LLM provided to llm_call()")
+        raise LLMCallException(ValueError("No LLM provided to llm_call()"))
     _setup_llm_call_info(llm, model_name, model_provider)
-    all_callbacks = _prepare_callbacks(custom_callback_handlers)
 
-    generation_llm: Union[BaseLanguageModel, Runnable] = llm.bind(**llm_params) if llm_params else llm
+    filtered_params = _filter_params_for_openai_reasoning_models(llm, llm_params)
+    generation_llm: Union[BaseLanguageModel, Runnable] = llm.bind(**filtered_params) if filtered_params else llm
 
-    if isinstance(prompt, str):
-        response = await _invoke_with_string_prompt(generation_llm, prompt, all_callbacks, stop)
+    if streaming_handler:
+        return await _stream_llm_call(generation_llm, prompt, streaming_handler, stop)
     else:
-        response = await _invoke_with_message_list(generation_llm, prompt, all_callbacks, stop)
+        all_callbacks = _prepare_callbacks(custom_callback_handlers)
 
-    _store_reasoning_traces(response)
-    _store_tool_calls(response)
-    _store_response_metadata(response)
-    return _extract_content(response)
+        if isinstance(prompt, str):
+            response = await _invoke_with_string_prompt(generation_llm, prompt, all_callbacks, stop)
+        else:
+            response = await _invoke_with_message_list(generation_llm, prompt, all_callbacks, stop)
+
+        _store_reasoning_traces(response)
+        _store_tool_calls(response)
+        _store_response_metadata(response)
+        return _extract_content(response)
+
+
+async def _stream_llm_call(
+    llm: Union[BaseLanguageModel, Runnable],
+    prompt: Union[str, List[dict]],
+    handler: "StreamingHandler",
+    stop: Optional[List[str]],
+) -> str:
+    """Stream LLM response using astream().
+
+    Pushes each chunk to the handler's queue. Another consumer can
+    iterate over the handler concurrently to receive chunks.
+    """
+    if isinstance(prompt, list):
+        messages = _convert_messages_to_langchain_format(prompt)
+    else:
+        messages = prompt
+
+    handler.stop = stop or []
+    accumulated_metadata: Dict[str, Any] = {}
+
+    try:
+        async for chunk in llm.astream(messages, stop=stop, config=RunnableConfig(callbacks=logging_callbacks)):
+            if hasattr(chunk, "content"):
+                content = chunk.content
+            else:
+                content = str(chunk)
+
+            chunk_metadata = _extract_chunk_metadata(chunk)
+            if chunk_metadata:
+                accumulated_metadata.update(chunk_metadata)
+
+            await handler.push_chunk(content, chunk_metadata)
+
+        if accumulated_metadata:
+            llm_response_metadata_var.set(accumulated_metadata)
+
+        await handler.finish()
+        return handler.completion
+
+    except Exception as e:
+        _raise_llm_call_exception(e, llm)
+
+
+def _extract_chunk_metadata(chunk) -> Optional[Dict[str, Any]]:
+    metadata: Dict[str, Any] = {}
+    if hasattr(chunk, "response_metadata") and chunk.response_metadata:
+        metadata["response_metadata"] = chunk.response_metadata
+    if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
+        metadata["usage_metadata"] = chunk.usage_metadata
+    return metadata if metadata else None
 
 
 def _setup_llm_call_info(llm: BaseLanguageModel, model_name: Optional[str], model_provider: Optional[str]) -> None:
@@ -200,6 +295,58 @@ def _prepare_callbacks(
     return logging_callbacks
 
 
+def _raise_llm_call_exception(
+    exception: Exception,
+    llm: Union[BaseLanguageModel, Runnable],
+) -> NoReturn:
+    """Raise an LLMCallException with enriched context about the failed invocation.
+
+    Args:
+        exception: The original exception that occurred
+        llm: The LLM instance that was being invoked
+
+    Raises:
+        LLMCallException with context message including model name and endpoint
+    """
+    # Extract model name from context
+    llm_call_info = llm_call_info_var.get()
+    model_name = (
+        llm_call_info.llm_model_name
+        if llm_call_info
+        else _infer_model_name(llm)
+        if isinstance(llm, BaseLanguageModel)
+        else ""
+    )
+
+    # Extract endpoint URL from the LLM instance
+    endpoint_url = None
+    for attr in BASE_URL_ATTRIBUTES:
+        if hasattr(llm, attr):
+            value = getattr(llm, attr, None)
+            if value:
+                endpoint_url = str(value)
+                break
+
+    # If we didn't find endpoint URL, check the nested client object.
+    if not endpoint_url and hasattr(llm, "client"):
+        client = getattr(llm, "client", None)
+        if client and hasattr(client, "base_url"):
+            endpoint_url = str(client.base_url)
+
+    # Build context message with model and endpoint info
+    context_parts = []
+    if model_name:
+        context_parts.append(f"model={model_name}")
+    if endpoint_url:
+        context_parts.append(f"endpoint={endpoint_url}")
+
+    if context_parts:
+        detail = f"Error invoking LLM ({', '.join(context_parts)})"
+        raise LLMCallException(exception, detail=detail) from exception
+    else:
+        raise LLMCallException(exception) from exception
+
+
 async def _invoke_with_string_prompt(
     llm: Union[BaseLanguageModel, Runnable],
     prompt: str,
@@ -210,7 +357,7 @@ async def _invoke_with_string_prompt(
     try:
         return await llm.ainvoke(prompt, config=RunnableConfig(callbacks=callbacks), stop=stop)
     except Exception as e:
-        raise LLMCallException(e)
+        _raise_llm_call_exception(e, llm)
 
 
 async def _invoke_with_message_list(
@@ -225,7 +372,7 @@ async def _invoke_with_message_list(
     try:
         return await llm.ainvoke(messages, config=RunnableConfig(callbacks=callbacks), stop=stop)
     except Exception as e:
-        raise LLMCallException(e)
+        _raise_llm_call_exception(e, llm)
 
 
 def _convert_messages_to_langchain_format(prompt: List[dict]) -> List:
@@ -255,8 +402,10 @@ def _store_reasoning_traces(response) -> None:
         # both extraction methods to support different provider implementations.
         reasoning_content = _extract_and_remove_think_tags(response)
 
-    if reasoning_content:
-        reasoning_trace_var.set(reasoning_content)
+    # Always set the variable, even if reasoning_content is None.
+    # This ensures each LLM call has a clean slate and prevents stale reasoning
+    # traces from previous LLM calls (e.g., safety checks) from leaking through.
+    reasoning_trace_var.set(reasoning_content)
 
 
 def _extract_reasoning_from_content_blocks(response) -> Optional[str]:

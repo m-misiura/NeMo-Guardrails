@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -229,6 +229,9 @@ class TestJailbreakDetectionActions:
     @pytest.mark.asyncio
     async def test_jailbreak_detection_model_local_success(self, monkeypatch, caplog):
         """Test successful local model execution."""
+        import logging
+
+        caplog.set_level(logging.INFO)
         from nemoguardrails.library.jailbreak_detection.actions import (
             jailbreak_detection_model,
         )

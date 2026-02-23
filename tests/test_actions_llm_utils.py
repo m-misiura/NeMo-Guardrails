@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import cast
+from unittest.mock import AsyncMock
+
 import pytest
+from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
 
 from nemoguardrails.actions.llm.utils import (
@@ -21,11 +25,14 @@ from nemoguardrails.actions.llm.utils import (
     _extract_reasoning_from_content_blocks,
     _extract_tool_calls_from_attribute,
     _extract_tool_calls_from_content_blocks,
+    _filter_params_for_openai_reasoning_models,
     _infer_provider_from_module,
     _store_reasoning_traces,
     _store_tool_calls,
+    llm_call,
 )
 from nemoguardrails.context import reasoning_trace_var, tool_calls_var
+from nemoguardrails.exceptions import LLMCallException
 
 
 @pytest.fixture(autouse=True)
@@ -59,12 +66,22 @@ class MockUnknownLLM:
     __module__ = "some_custom_package.models"
 
 
-class MockNVIDIAOriginal:
-    __module__ = "langchain_nvidia_ai_endpoints.chat_models"
+class MockTRTLLM:
+    __module__ = "nemoguardrails.llm.providers.trtllm.llm"
 
 
-class MockPatchedNVIDIA(MockNVIDIAOriginal):
-    __module__ = "nemoguardrails.llm.providers._langchain_nvidia_ai_endpoints_patch"
+class MockAzureLLM:
+    __module__ = "langchain_openai.chat_models"
+
+
+class MockLLMWithClient:
+    __module__ = "langchain_openai.chat_models"
+
+    class _MockClient:
+        base_url = "https://custom.endpoint.com/v1"
+
+    def __init__(self):
+        self.client = self._MockClient()
 
 
 def test_infer_provider_openai():
@@ -95,12 +112,6 @@ def test_infer_provider_unknown():
     llm = MockUnknownLLM()
     provider = _infer_provider_from_module(llm)
     assert provider is None
-
-
-def test_infer_provider_from_patched_class():
-    llm = MockPatchedNVIDIA()
-    provider = _infer_provider_from_module(llm)
-    assert provider == "nvidia_ai_endpoints"
 
 
 def test_infer_provider_checks_base_classes():
@@ -548,3 +559,138 @@ async def test_llm_call_stop_tokens_passed_without_llm_params(llm_params):
     await llm_call(mock_llm, "prompt", stop=["User:"], llm_params=llm_params)
 
     assert mock_llm.ainvoke.call_args[1]["stop"] == ["User:"]
+
+
+@pytest.mark.asyncio
+async def test_llm_call_exception_enrichment_with_model_and_endpoint():
+    """Test that LLM invocation errors include model and endpoint context."""
+    mock_llm = MockOpenAILLM()
+    mock_llm.model_name = "gpt-4"
+    mock_llm.base_url = "https://api.openai.com/v1"
+    mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("Connection refused"))
+
+    with pytest.raises(LLMCallException) as exc_info:
+        await llm_call(cast(BaseLanguageModel, mock_llm), "test prompt")
+
+    exc_str = str(exc_info.value)
+    assert "gpt-4" in exc_str
+    assert "https://api.openai.com/v1" in exc_str
+    assert "Connection refused" in exc_str
+    assert isinstance(exc_info.value.inner_exception, ConnectionError)
+
+
+@pytest.mark.asyncio
+async def test_llm_call_exception_without_endpoint():
+    """Test exception enrichment when endpoint URL is not available."""
+    mock_llm = AsyncMock()
+    mock_llm.__module__ = "langchain_openai.chat_models"
+    mock_llm.model_name = "custom-model"
+    # No base_url attribute
+    mock_llm.ainvoke = AsyncMock(side_effect=ValueError("Invalid request"))
+
+    with pytest.raises(LLMCallException) as exc_info:
+        await llm_call(mock_llm, "test prompt")
+
+    # Should still have model name but no endpoint
+    assert "custom-model" in str(exc_info.value)
+    assert "Invalid request" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_llm_call_exception_extracts_azure_endpoint():
+    """Test that Azure-style endpoint URLs are extracted."""
+    mock_llm = MockAzureLLM()
+    mock_llm.model_name = "gpt-4"
+    mock_llm.azure_endpoint = "https://example.openai.azure.com"
+    mock_llm.ainvoke = AsyncMock(side_effect=Exception("Azure error"))
+
+    with pytest.raises(LLMCallException) as exc_info:
+        await llm_call(cast(BaseLanguageModel, mock_llm), "test prompt")
+
+    exc_str = str(exc_info.value)
+    assert "https://example.openai.azure.com" in exc_str
+    assert "gpt-4" in exc_str
+    assert "Azure error" in exc_str
+
+
+@pytest.mark.asyncio
+async def test_llm_call_exception_extracts_server_url():
+    """Test that TRT-style server_url is extracted."""
+    mock_llm = MockTRTLLM()
+    mock_llm.model_name = "llama-2-70b"
+    mock_llm.server_url = "https://triton.example.com:8000"
+    mock_llm.ainvoke = AsyncMock(side_effect=Exception("Triton server error"))
+
+    with pytest.raises(LLMCallException) as exc_info:
+        await llm_call(cast(BaseLanguageModel, mock_llm), "test prompt")
+
+    exc_str = str(exc_info.value)
+    assert "https://triton.example.com:8000" in exc_str
+    assert "llama-2-70b" in exc_str
+    assert "Triton server error" in exc_str
+
+
+@pytest.mark.asyncio
+async def test_llm_call_exception_extracts_nested_client_base_url():
+    """Test that nested client.base_url is extracted."""
+    mock_llm = MockLLMWithClient()
+    mock_llm.model_name = "gpt-4-turbo"
+    mock_llm.ainvoke = AsyncMock(side_effect=Exception("Client error"))
+
+    with pytest.raises(LLMCallException) as exc_info:
+        await llm_call(cast(BaseLanguageModel, mock_llm), "test prompt")
+
+    exc_str = str(exc_info.value)
+    assert "https://custom.endpoint.com/v1" in exc_str
+    assert "gpt-4-turbo" in exc_str
+    assert "Client error" in exc_str
+
+
+def _create_llm(model_name):
+    try:
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(model=model_name)
+    except Exception:
+
+        class _MockLLM:
+            def __init__(self, model_name):
+                self.model_name = model_name
+
+        return _MockLLM(model_name)
+
+
+class TestFilterParamsForOpenAIReasoningModels:
+    @pytest.mark.parametrize(
+        "model,params,expected",
+        [
+            ("gpt-4", {"temperature": 0.5, "max_tokens": 100}, {"temperature": 0.5, "max_tokens": 100}),
+            ("gpt-4o", {"temperature": 0.7}, {"temperature": 0.7}),
+            ("gpt-4o-mini", {"temperature": 0.3, "max_tokens": 50}, {"temperature": 0.3, "max_tokens": 50}),
+            ("gpt-5-chat", {"temperature": 0.5}, {"temperature": 0.5}),
+            ("o1-preview", {"temperature": 0.001, "max_tokens": 100}, {"max_tokens": 100}),
+            ("o1-mini", {"temperature": 0.5}, {}),
+            ("o3", {"temperature": 0.001, "max_tokens": 200}, {"max_tokens": 200}),
+            ("o3-mini", {"temperature": 0.1}, {}),
+            ("gpt-5", {"temperature": 0.001}, {}),
+            ("gpt-5-mini", {"temperature": 0.5, "max_tokens": 100}, {"max_tokens": 100}),
+            ("gpt-5-nano", {"temperature": 0.001}, {}),
+            ("o1-preview", {"max_tokens": 100}, {"max_tokens": 100}),
+            ("o1-preview", {}, {}),
+        ],
+    )
+    def test_filter_params(self, model, params, expected):
+        llm = _create_llm(model)
+        result = _filter_params_for_openai_reasoning_models(llm, params)
+        assert result == expected
+
+    def test_returns_none_when_llm_params_is_none(self):
+        llm = _create_llm("gpt-4")
+        result = _filter_params_for_openai_reasoning_models(llm, None)
+        assert result is None
+
+    def test_does_not_modify_original_params(self):
+        llm = _create_llm("o1-preview")
+        params = {"temperature": 0.5, "max_tokens": 100}
+        _filter_params_for_openai_reasoning_models(llm, params)
+        assert params == {"temperature": 0.5, "max_tokens": 100}

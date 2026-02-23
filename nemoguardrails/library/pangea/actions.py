@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -108,7 +108,7 @@ async def pangea_ai_guard(
                 "Accept": "application/json",
                 "Authorization": f"Bearer {pangea_api_token}",
                 "Content-Type": "application/json",
-                "User-Agent": "NeMo Guardrails (https://github.com/NVIDIA/NeMo-Guardrails)",
+                "User-Agent": "NeMo Guardrails (https://github.com/NVIDIA-NeMo/Guardrails)",
             },
         )
         try:

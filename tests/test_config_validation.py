@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,7 +75,7 @@ def test_self_check_input_prompt_exception():
         )
         LLMRails(config=config)
 
-    assert "You must provide a `self_check_input` prompt" in str(exc_info.value)
+    assert "Missing a `self_check_input` prompt template" in str(exc_info.value)
 
 
 def test_self_check_output_prompt_exception():
@@ -90,7 +90,7 @@ def test_self_check_output_prompt_exception():
         )
         LLMRails(config=config)
 
-    assert "You must provide a `self_check_output` prompt" in str(exc_info.value)
+    assert "Missing a `self_check_output` prompt template" in str(exc_info.value)
 
 
 def test_passthrough_and_single_call_incompatibility():
