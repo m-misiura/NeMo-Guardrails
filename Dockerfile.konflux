@@ -15,9 +15,10 @@ RUN if [ "$TARGETARCH" = "ppc64le" ]; then                        \
         dnf install -y \
         make libtool wget patch ninja-build cmake xz bzip2-devel libffi-devel zlib-devel openssl-devel libevent-devel \
         python3.12 python3.12-devel python3.12-pip clang \
-        gcc-toolset-14-gcc gcc-toolset-14-gcc-c++ gcc-toolset-14-gcc-gfortran skopeo rust cargo && \
+        gcc-toolset-14-gcc gcc-toolset-14-gcc-c++ gcc-toolset-14-gcc-gfortran skopeo && \
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y      && \
         dnf clean all                                                   && \
-        pip install --upgrade setuptools-rust pip 'cmake<4' setuptools wheel ; \
+        pip install --upgrade setuptools-rust pip 'cmake<4' setuptools wheel maturin  ; \
     fi
 
 COPY requirements* /app/
@@ -126,7 +127,25 @@ RUN if [ "$TARGETARCH" = "ppc64le" ]; then \
     fi
 
 ###############################################################
-# Stage 6 Install all the dependencies
+# Stage 6 Install hf_xet from source ppc64le
+###############################################################
+FROM packages-build AS hf-xet-builder
+ARG TARGETARCH
+USER root
+
+WORKDIR /app
+RUN mkdir -p /hf_xet_wheels
+
+RUN if [ "$TARGETARCH" = "ppc64le" ]; then \
+       export HF_XET_VERSION=$(sed -n "s/^hf-xet==//p" /app/requirements.txt) && \
+       git clone https://github.com/huggingface/xet-core.git && \
+       cd xet-core/hf_xet && git checkout v${HF_XET_VERSION} && \
+       sed -i '/python-source = "python"/d' pyproject.toml && \
+       maturin build --release --out /hf_xet_wheels ; \
+    fi
+
+###############################################################
+# Stage 7 Install all the dependencies
 ###############################################################
 
 FROM registry.access.redhat.com/ubi9/python-312@sha256:34263471b5e86b0704054e817d7703d0063b0909a64bd95360f4a8b0c730d970 as build
@@ -167,15 +186,18 @@ COPY --from=openblas-builder /tmp/openblas/ /tmp/openblas
 COPY --from=torch-builder /tmp/control /dev/null
 COPY --from=tiktoken-builder /tmp/control /dev/null
 COPY --from=onnxruntime-builder /tmp/control /dev/null
+COPY --from=hf-xet-builder /tmp/control /dev/null
 
 RUN --mount=type=cache,from=torch-builder,source=/torchwheels/,target=/tmp/torchwheels/,ro \
     --mount=type=cache,from=tiktoken-builder,source=/tiktokenwheels/,target=/tmp/tiktokenwheels/,ro \
     --mount=type=cache,from=onnxruntime-builder,source=/onnxruntime_wheels/,target=/tmp/onnxruntime_wheels/,ro \
+    --mount=type=cache,from=hf-xet-builder,source=/hf_xet_wheels/,target=/tmp/hf_xet_wheels/,ro \
     if [ "$TARGETARCH" = "ppc64le" ]; then \
         /app/.venv/bin/pip install \
             /tmp/torchwheels/*.whl \
             /tmp/tiktokenwheels/*.whl \
-            /tmp/onnxruntime_wheels/*.whl && \
+            /tmp/onnxruntime_wheels/*.whl  \
+            /tmp/hf_xet_wheels/*.whl && \
         PREFIX=/app/.openblas make -C /tmp/openblas install && rm -rf /tmp/openblas     ; \
     fi
 
@@ -197,7 +219,7 @@ RUN set -ex && \
     rm -rf /app/.cache/huggingface/xet /root/.cache /tmp/* /var/tmp/*
 
 ###############################################################
-# Stage 7 Final Build
+# Stage 8 Final Build
 ###############################################################
 
 FROM registry.access.redhat.com/ubi9/python-312:latest as runtime
