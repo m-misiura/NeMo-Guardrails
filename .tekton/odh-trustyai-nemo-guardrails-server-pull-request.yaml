@@ -48,6 +48,8 @@ spec:
       [{"type": "generic", "path": "."}]
   - name: hermetic
     value: false
+  - name: rhoai-version
+    value: "3.4.0"
   - name: enable-slack-failure-notification
     value: "false"
   - name: path-context
