@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,18 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for tool output rails (Phase 2) functionality."""
+
 from unittest.mock import patch
 
 import pytest
 
-from nemoguardrails import LLMRails, RailsConfig
+from nemoguardrails import RailsConfig
 from nemoguardrails.actions import action
-from nemoguardrails.types import LLMResponse, ToolCall, ToolCallFunction
-from tests.utils import FakeLLMModel, TestChat
+from tests.utils import TestChat
 
 
 @action(is_system_action=True)
 async def validate_tool_parameters(tool_calls, context=None, **kwargs):
+    """Test implementation of tool parameter validation."""
     tool_calls = tool_calls or (context.get("tool_calls", []) if context else [])
 
     dangerous_patterns = ["eval", "exec", "system", "../", "rm -", "DROP", "DELETE"]
@@ -41,6 +43,7 @@ async def validate_tool_parameters(tool_calls, context=None, **kwargs):
 
 @action(is_system_action=True)
 async def self_check_tool_calls(tool_calls, context=None, **kwargs):
+    """Test implementation of tool call validation."""
     tool_calls = tool_calls or (context.get("tool_calls", []) if context else [])
 
     return all(isinstance(call, dict) and "function" in call and "id" in call for call in tool_calls)
@@ -48,6 +51,8 @@ async def self_check_tool_calls(tool_calls, context=None, **kwargs):
 
 @pytest.mark.asyncio
 async def test_tool_output_rails_basic():
+    """Test basic tool output rails functionality."""
+
     test_tool_calls = [
         {
             "name": "allowed_tool",
@@ -57,6 +62,7 @@ async def test_tool_output_rails_basic():
         }
     ]
 
+    # Config with tool output rails
     config = RailsConfig.from_content(
         """
         define subflow self check tool calls
@@ -89,20 +95,25 @@ async def test_tool_output_rails_basic():
 
         result = await chat.app.generate_async(messages=[{"role": "user", "content": "Use allowed tool"}])
 
+        # Tool should be allowed through
         assert result["tool_calls"] is not None
         assert result["tool_calls"][0]["name"] == "allowed_tool"
 
 
 @pytest.mark.asyncio
 async def test_tool_output_rails_blocking():
-    dangerous_tool_call_objects = [
-        ToolCall(
-            id="call_bad",
-            type="function",
-            function=ToolCallFunction(name="dangerous_tool", arguments={"param": "eval('malicious code')"}),
-        )
+    """Test that tool output rails can block dangerous tools."""
+
+    test_tool_calls = [
+        {
+            "name": "dangerous_tool",
+            "args": {"param": "eval('malicious code')"},
+            "id": "call_bad",
+            "type": "tool_call",
+        }
     ]
 
+    # Config with tool parameter validation
     config = RailsConfig.from_content(
         """
         define subflow validate tool parameters
@@ -125,19 +136,34 @@ async def test_tool_output_rails_blocking():
         """,
     )
 
-    fake_llm = FakeLLMModel(llm_responses=[LLMResponse(content="", tool_calls=dangerous_tool_call_objects)])
-    rails = LLMRails(config, llm=fake_llm)
+    # Create a mock LLM that returns tool calls
+    class MockLLMWithDangerousTool:
+        def invoke(self, messages, **kwargs):
+            from langchain_core.messages import AIMessage
 
-    rails.runtime.register_action(validate_tool_parameters, name="validate_tool_parameters")
-    rails.runtime.register_action(self_check_tool_calls, name="self_check_tool_calls")
+            return AIMessage(content="", tool_calls=test_tool_calls)
 
-    result = await rails.generate_async(messages=[{"role": "user", "content": "Use dangerous tool"}])
+        async def ainvoke(self, messages, **kwargs):
+            return self.invoke(messages, **kwargs)
 
-    assert "parameters may be unsafe" in result["content"]
+    from langchain_core.messages import HumanMessage
+
+    from nemoguardrails.integrations.langchain.runnable_rails import RunnableRails
+
+    rails = RunnableRails(config, llm=MockLLMWithDangerousTool())
+
+    rails.rails.runtime.register_action(validate_tool_parameters, name="validate_tool_parameters")
+    rails.rails.runtime.register_action(self_check_tool_calls, name="self_check_tool_calls")
+
+    result = await rails.ainvoke(HumanMessage(content="Use dangerous tool"))
+
+    assert "parameters may be unsafe" in result.content
 
 
 @pytest.mark.asyncio
 async def test_multiple_tool_output_rails():
+    """Test multiple tool output rails working together."""
+
     test_tool_calls = [
         {
             "name": "test_tool",
