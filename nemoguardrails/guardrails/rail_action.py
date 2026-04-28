@@ -26,6 +26,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Optional, Union
 
+from nemoguardrails.guardrails.api_engine import APIEngineError
 from nemoguardrails.guardrails.engine_registry import EngineRegistry
 from nemoguardrails.guardrails.guardrails_types import (
     LLMMessages,
@@ -33,6 +34,7 @@ from nemoguardrails.guardrails.guardrails_types import (
     get_request_id,
     truncate,
 )
+from nemoguardrails.guardrails.model_engine import ModelEngineError
 from nemoguardrails.guardrails.telemetry import action_span, record_span_error
 from nemoguardrails.llm.taskmanager import LLMTaskManager
 from nemoguardrails.rails.llm.config import _get_flow_model, _get_flow_name
@@ -101,8 +103,14 @@ class RailAction(ABC):
                 response = await self._get_response(model_type, prompt)
                 log.debug("[%s] %s response: %s", req_id, base_flow, truncate(response))
                 return self._parse_response(response)
+            except (ModelEngineError, APIEngineError) as e:
+                record_span_error(span, e)
+                if e.status is not None:
+                    log.error("[%s] %s failed (HTTP %d): %s", req_id, base_flow, e.status, e)
+                    raise
+                log.error("[%s] %s failed: %s", req_id, base_flow, e)
+                return RailResult(is_safe=False, reason=f"{base_flow} error: {e}")
             except Exception as e:
-                # Record an error on the OTEL span
                 record_span_error(span, e)
                 log.error("[%s] %s failed: %s", req_id, base_flow, e)
                 return RailResult(is_safe=False, reason=f"{base_flow} error: {e}")

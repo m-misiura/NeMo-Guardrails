@@ -77,6 +77,7 @@ from nemoguardrails.exceptions import (
 )
 from nemoguardrails.kb.kb import KnowledgeBase
 from nemoguardrails.llm.cache import CacheInterface, LFUCache
+from nemoguardrails.llm.clients._errors import _redact_secrets
 from nemoguardrails.llm.models.initializer import (
     ModelInitializationError,
     init_llm_model,
@@ -899,14 +900,23 @@ class LLMRails:
                 log.error("Error in generate_async: %s", e, exc_info=True)
                 streaming_handler = streaming_handler_var.get()
                 if streaming_handler:
-                    # Push an error chunk instead of None.
-                    error_message = str(e)
-                    error_dict = extract_error_json(error_message)
+                    error_dict = extract_error_json(str(e))
+                    error_val = error_dict.get("error")
+                    status = getattr(e, "status", None)
+                    if isinstance(error_val, dict):
+                        error_val["message"] = _redact_secrets(error_val.get("message", ""))
+                        if status is not None:
+                            error_val["code"] = status
+                            error_val["type"] = "downstream_error"
+                    elif isinstance(error_val, str):
+                        error_dict["error"] = {
+                            "message": _redact_secrets(error_val),
+                            "type": "downstream_error" if status is not None else "generation_error",
+                            "code": status if status is not None else "generation_failed",
+                        }
                     error_payload: str = json.dumps(error_dict)
                     await streaming_handler.push_chunk(error_payload)
-                    # push a termination signal
                     await streaming_handler.push_chunk(END_OF_STREAM)  # type: ignore
-                # Re-raise the exact exception
                 raise
         else:
             # In generation mode, by default the bot response is an instant action.
@@ -1265,11 +1275,21 @@ class LLMRails:
                     state=state,
                 )
             except Exception as e:
-                # If an exception occurs during generation, push it to the streaming handler as a json string
-                # This ensures the streaming pipeline is properly terminated
                 log.error(f"Error in generation task: {e}", exc_info=True)
-                error_message = str(e)
-                error_dict = extract_error_json(error_message)
+                error_dict = extract_error_json(str(e))
+                error_val = error_dict.get("error")
+                status = getattr(e, "status", None)
+                if isinstance(error_val, dict):
+                    error_val["message"] = _redact_secrets(error_val.get("message", ""))
+                    if status is not None:
+                        error_val["code"] = status
+                        error_val["type"] = "downstream_error"
+                elif isinstance(error_val, str):
+                    error_dict["error"] = {
+                        "message": _redact_secrets(error_val),
+                        "type": "downstream_error" if status is not None else "generation_error",
+                        "code": status if status is not None else "generation_failed",
+                    }
                 error_payload = json.dumps(error_dict)
                 await streaming_handler.push_chunk(error_payload)
                 await streaming_handler.push_chunk(END_OF_STREAM)  # type: ignore
