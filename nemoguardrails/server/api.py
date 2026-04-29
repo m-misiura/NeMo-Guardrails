@@ -1026,6 +1026,9 @@ async def _process_message(
     if role == "user":
         return None, _create_check_options(run_input=True)
 
+    if role == "system":
+        return None, _create_check_options(run_input=True)
+
     if role == "assistant":
         if "tool_calls" in msg:
             # Tool output rails - validate tool calls before execution
@@ -1039,7 +1042,7 @@ async def _process_message(
         return None, _create_check_options(run_tool_input=True)
 
     # Unsupported role
-    raise ValueError(f"Unsupported message role: '{role}'. Supported roles are: 'user', 'assistant', 'tool'.")
+    raise ValueError(f"Unsupported message role: '{role}'. Supported roles are: 'user', 'system', 'assistant', 'tool'.")
 
 
 def _build_check_messages(role: str, content: str, msg: dict) -> List[dict]:
@@ -1059,6 +1062,9 @@ def _build_check_messages(role: str, content: str, msg: dict) -> List[dict]:
     if role == "user":
         return [{"role": "user", "content": content}]
 
+    if role == "system":
+        return [{"role": "user", "content": content}]
+
     if role == "assistant":
         return [
             {"role": "user", "content": ""},
@@ -1071,7 +1077,7 @@ def _build_check_messages(role: str, content: str, msg: dict) -> List[dict]:
         return [tool_msg]
 
     # This should never be reached since _process_message validates the role first
-    raise ValueError(f"Unsupported message role: '{role}'. Supported roles are: 'user', 'assistant', 'tool'.")
+    raise ValueError(f"Unsupported message role: '{role}'. Supported roles are: 'user', 'system', 'assistant', 'tool'.")
 
 
 @app.post(
@@ -1083,6 +1089,7 @@ async def guardrail_checks(body: GuardrailsChatCompletionRequest, request: Reque
 
     This endpoint validates messages against configured guardrails using role-based routing:
     - user messages: evaluated by input rails
+    - system messages: evaluated by input rails
     - assistant messages: evaluated by output rails
     - tool messages: evaluated by tool_input rails
 
@@ -1111,6 +1118,7 @@ async def guardrail_checks(body: GuardrailsChatCompletionRequest, request: Reque
 
         Messages are checked independently based on role:
         - user messages: input rails
+        - system messages: input rails
         - assistant messages: output rails
         - tool messages: tool_input rails
         """
