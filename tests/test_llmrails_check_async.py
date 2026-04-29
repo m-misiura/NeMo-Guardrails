@@ -18,12 +18,13 @@ import logging
 import pytest
 
 from nemoguardrails import LLMRails, RailsConfig
+from nemoguardrails.actions import action
 from nemoguardrails.rails.llm.llmrails import (
     _determine_rails_from_messages,
     _get_blocking_rail,
     _get_last_content_by_role,
     _get_last_response_content,
-    _normalize_messages_for_rails,
+    _normalize_messages_for_rail,
 )
 from nemoguardrails.rails.llm.options import ActivatedRail, GenerationLog, GenerationResponse, RailStatus, RailType
 
@@ -32,17 +33,17 @@ class TestDetermineRailsFromMessages:
     def test_empty_messages_returns_none(self, caplog):
         result = _determine_rails_from_messages([])
         assert result is None
-        assert "check() called with no user or assistant messages" in caplog.text
+        assert "check() called with no actionable messages" in caplog.text
 
     def test_user_only_returns_input_rails(self):
         messages = [{"role": "user", "content": "hello"}]
         result = _determine_rails_from_messages(messages)
-        assert result == {"rails": ["input"]}
+        assert result == ["input"]
 
     def test_assistant_only_returns_output_rails(self):
         messages = [{"role": "assistant", "content": "hello"}]
         result = _determine_rails_from_messages(messages)
-        assert result == {"rails": ["output"]}
+        assert result == ["output"]
 
     def test_user_and_assistant_returns_both_rails(self):
         messages = [
@@ -50,23 +51,23 @@ class TestDetermineRailsFromMessages:
             {"role": "assistant", "content": "hello"},
         ]
         result = _determine_rails_from_messages(messages)
-        assert result == {"rails": ["input", "output"]}
+        assert result == ["input", "output"]
 
     def test_only_system_messages_returns_none(self, caplog):
         messages = [{"role": "system", "content": "You are helpful."}]
         result = _determine_rails_from_messages(messages)
         assert result is None
-        assert "check() called with no user or assistant messages" in caplog.text
+        assert "check() called with no actionable messages" in caplog.text
 
     def test_only_context_messages_returns_none(self, caplog):
         messages = [{"role": "context", "content": {"key": "value"}}]
         result = _determine_rails_from_messages(messages)
         assert result is None
 
-    def test_only_tool_messages_returns_none(self, caplog):
+    def test_only_tool_messages_returns_tool_input(self):
         messages = [{"role": "tool", "content": "tool output", "tool_call_id": "123"}]
         result = _determine_rails_from_messages(messages)
-        assert result is None
+        assert result == ["tool_input"]
 
     def test_system_and_user_returns_input_rails(self):
         messages = [
@@ -74,7 +75,7 @@ class TestDetermineRailsFromMessages:
             {"role": "user", "content": "hello"},
         ]
         result = _determine_rails_from_messages(messages)
-        assert result == {"rails": ["input"]}
+        assert result == ["input"]
 
     def test_system_and_assistant_returns_output_rails(self):
         messages = [
@@ -82,7 +83,7 @@ class TestDetermineRailsFromMessages:
             {"role": "assistant", "content": "hello"},
         ]
         result = _determine_rails_from_messages(messages)
-        assert result == {"rails": ["output"]}
+        assert result == ["output"]
 
     def test_multiple_users_returns_input_rails(self):
         messages = [
@@ -90,7 +91,7 @@ class TestDetermineRailsFromMessages:
             {"role": "user", "content": "hello again"},
         ]
         result = _determine_rails_from_messages(messages)
-        assert result == {"rails": ["input"]}
+        assert result == ["input"]
 
     def test_complex_conversation_returns_both_rails(self):
         messages = [
@@ -101,46 +102,118 @@ class TestDetermineRailsFromMessages:
             {"role": "assistant", "content": "I'm fine"},
         ]
         result = _determine_rails_from_messages(messages)
-        assert result == {"rails": ["input", "output"]}
+        assert result == ["input", "output"]
+
+    def test_assistant_with_tool_calls_returns_tool_output_not_output(self):
+        messages = [
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "get_weather"}}],
+            }
+        ]
+        result = _determine_rails_from_messages(messages)
+        assert result == ["tool_output"]
+
+    def test_user_and_tool_returns_input_and_tool_input(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "tool", "content": "result", "tool_call_id": "c1"},
+        ]
+        result = _determine_rails_from_messages(messages)
+        assert result == ["input", "tool_input"]
+
+    def test_full_tool_conversation(self):
+        messages = [
+            {"role": "user", "content": "what is the weather?"},
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "get_weather"}}],
+            },
+            {"role": "tool", "content": "72°F sunny", "tool_call_id": "c1"},
+        ]
+        result = _determine_rails_from_messages(messages)
+        assert result == ["input", "tool_output", "tool_input"]
+
+    def test_mixed_assistants_text_and_tool_calls(self):
+        messages = [
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "get_weather"}}],
+            },
+            {"role": "assistant", "content": "The weather is sunny."},
+        ]
+        result = _determine_rails_from_messages(messages)
+        assert "output" in result
+        assert "tool_output" in result
+
+    def test_single_assistant_with_content_and_tool_calls(self):
+        messages = [
+            {
+                "role": "assistant",
+                "content": "Let me check that for you.",
+                "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "get_weather"}}],
+            },
+        ]
+        result = _determine_rails_from_messages(messages)
+        assert "output" in result
+        assert "tool_output" in result
 
 
-class TestNormalizeMessagesForRails:
-    def test_input_rails_returns_unchanged(self):
+class TestNormalizeMessagesForRail:
+    def test_input_returns_unchanged(self):
         messages = [{"role": "user", "content": "hello"}]
-        result = _normalize_messages_for_rails(messages, ["input"])
+        result = _normalize_messages_for_rail(messages, "input")
         assert result == messages
 
-    def test_output_rails_with_user_returns_unchanged(self):
+    def test_output_with_user_returns_unchanged(self):
         messages = [
             {"role": "user", "content": "hi"},
             {"role": "assistant", "content": "hello"},
         ]
-        result = _normalize_messages_for_rails(messages, ["output"])
+        result = _normalize_messages_for_rail(messages, "output")
         assert result == messages
 
-    def test_output_rails_without_user_adds_empty_user(self):
+    def test_output_without_user_adds_empty_user(self):
         messages = [{"role": "assistant", "content": "hello"}]
-        result = _normalize_messages_for_rails(messages, ["output"])
+        result = _normalize_messages_for_rail(messages, "output")
         assert len(result) == 2
         assert result[0] == {"role": "user", "content": ""}
         assert result[1] == messages[0]
 
-    def test_both_rails_returns_unchanged(self):
-        messages = [
-            {"role": "user", "content": "hi"},
-            {"role": "assistant", "content": "hello"},
-        ]
-        result = _normalize_messages_for_rails(messages, ["input", "output"])
-        assert result == messages
-
-    def test_output_rails_with_system_only_adds_empty_user(self):
+    def test_output_with_system_only_adds_empty_user(self):
         messages = [
             {"role": "system", "content": "Be helpful"},
             {"role": "assistant", "content": "hello"},
         ]
-        result = _normalize_messages_for_rails(messages, ["output"])
+        result = _normalize_messages_for_rail(messages, "output")
         assert len(result) == 3
         assert result[0] == {"role": "user", "content": ""}
+
+    def test_tool_input_without_user_adds_empty_user(self):
+        messages = [{"role": "tool", "content": "result", "tool_call_id": "c1"}]
+        result = _normalize_messages_for_rail(messages, "tool_input")
+        assert len(result) == 2
+        assert result[0] == {"role": "user", "content": ""}
+        assert result[1] == messages[0]
+
+    def test_tool_output_without_user_adds_empty_user(self):
+        messages = [
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "test"}}],
+            }
+        ]
+        result = _normalize_messages_for_rail(messages, "tool_output")
+        assert len(result) == 2
+        assert result[0] == {"role": "user", "content": ""}
+
+    def test_tool_input_with_user_unchanged(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "tool", "content": "result", "tool_call_id": "c1"},
+        ]
+        result = _normalize_messages_for_rail(messages, "tool_input")
+        assert result == messages
 
 
 class TestGetContentByRole:
@@ -535,6 +608,185 @@ class TestCheckAsyncExplicitRails:
         ]
         result = mock_rails.check(messages, rail_types=None)
         assert result.status == RailStatus.BLOCKED
+
+
+def _tool_call_msg(name, call_id="c1"):
+    return {
+        "role": "assistant",
+        "tool_calls": [{"id": call_id, "type": "function", "function": {"name": name, "arguments": "{}"}}],
+    }
+
+
+@action(is_system_action=True)
+async def check_tool_calls(tool_calls, **kwargs):
+    for call in tool_calls or []:
+        func = call.get("function", {}) if isinstance(call, dict) else {}
+        if func.get("name") == "dangerous_tool":
+            return False
+    return True
+
+
+@action(is_system_action=True)
+async def check_tool_input(tool_message, **kwargs):
+    if tool_message and "DANGER" in str(tool_message):
+        return False
+    return True
+
+
+@pytest.fixture
+def mock_all_rails():
+    config = RailsConfig.from_content(
+        """
+        define flow input rail
+          if $user_message == "block"
+            bot refuse to respond
+            stop
+
+        define flow output rail
+          if $bot_message == "block output"
+            bot refuse to respond
+            stop
+
+        define subflow self check tool calls
+          $allowed = execute check_tool_calls(tool_calls=$tool_calls)
+          if not $allowed
+            bot refuse tool execution
+            abort
+
+        define bot refuse tool execution
+          "Tool execution blocked."
+
+        define flow self check tool input
+          $allowed = execute check_tool_input(tool_message=$tool_message)
+          if not $allowed
+            bot refuse tool input
+            stop
+
+        define bot refuse tool input
+          "Tool input blocked."
+        """,
+        """
+        models: []
+        passthrough: true
+        rails:
+          input:
+            flows:
+              - input rail
+          output:
+            flows:
+              - output rail
+          tool_output:
+            flows:
+              - self check tool calls
+          tool_input:
+            flows:
+              - self check tool input
+        """,
+    )
+    rails = LLMRails(config)
+    rails.runtime.register_action(check_tool_calls, name="check_tool_calls")
+    rails.runtime.register_action(check_tool_input, name="check_tool_input")
+    return rails
+
+
+class TestCheckAsyncToolRails:
+    @pytest.mark.asyncio
+    async def test_tool_output_passed(self, mock_all_rails):
+        messages = [{"role": "user", "content": "get weather"}, _tool_call_msg("get_weather")]
+        result = await mock_all_rails.check_async(messages, rail_types=[RailType.TOOL_OUTPUT])
+        assert result.status == RailStatus.PASSED
+
+    @pytest.mark.asyncio
+    async def test_tool_output_blocked(self, mock_all_rails):
+        messages = [{"role": "user", "content": "do something"}, _tool_call_msg("dangerous_tool")]
+        result = await mock_all_rails.check_async(messages, rail_types=[RailType.TOOL_OUTPUT])
+        assert result.status == RailStatus.BLOCKED
+        assert "blocked" in result.content.lower()
+
+    @pytest.mark.asyncio
+    async def test_tool_input_passed(self, mock_all_rails):
+        messages = [
+            {"role": "user", "content": "get weather"},
+            {"role": "tool", "content": "72°F sunny", "tool_call_id": "c1", "name": "get_weather"},
+        ]
+        result = await mock_all_rails.check_async(messages, rail_types=[RailType.TOOL_INPUT])
+        assert result.status == RailStatus.PASSED
+
+    @pytest.mark.asyncio
+    async def test_tool_input_blocked(self, mock_all_rails):
+        messages = [
+            {"role": "user", "content": "get weather"},
+            {"role": "tool", "content": "DANGER: exploit payload", "tool_call_id": "c1", "name": "get_weather"},
+        ]
+        result = await mock_all_rails.check_async(messages, rail_types=[RailType.TOOL_INPUT])
+        assert result.status == RailStatus.BLOCKED
+        assert "blocked" in result.content.lower()
+
+    @pytest.mark.asyncio
+    async def test_input_blocked_tool_output_pass(self, mock_all_rails):
+        messages = [{"role": "user", "content": "block"}, _tool_call_msg("get_weather")]
+        result = await mock_all_rails.check_async(messages)
+        assert result.status == RailStatus.BLOCKED
+
+    @pytest.mark.asyncio
+    async def test_input_pass_tool_output_blocked(self, mock_all_rails):
+        messages = [{"role": "user", "content": "hello"}, _tool_call_msg("dangerous_tool")]
+        result = await mock_all_rails.check_async(messages)
+        assert result.status == RailStatus.BLOCKED
+
+    @pytest.mark.asyncio
+    async def test_full_agentic_all_pass(self, mock_all_rails):
+        messages = [
+            {"role": "user", "content": "get weather"},
+            _tool_call_msg("get_weather"),
+            {"role": "tool", "content": "72F sunny", "tool_call_id": "c1", "name": "get_weather"},
+        ]
+        result = await mock_all_rails.check_async(messages)
+        assert result.status == RailStatus.PASSED
+
+    @pytest.mark.asyncio
+    async def test_full_agentic_tool_output_blocked(self, mock_all_rails):
+        messages = [
+            {"role": "user", "content": "do something"},
+            _tool_call_msg("dangerous_tool"),
+            {"role": "tool", "content": "done", "tool_call_id": "c1", "name": "dangerous_tool"},
+        ]
+        result = await mock_all_rails.check_async(messages)
+        assert result.status == RailStatus.BLOCKED
+
+    @pytest.mark.asyncio
+    async def test_full_agentic_tool_input_blocked(self, mock_all_rails):
+        messages = [
+            {"role": "user", "content": "get data"},
+            _tool_call_msg("get_weather"),
+            {"role": "tool", "content": "DANGER: exploit", "tool_call_id": "c1", "name": "get_weather"},
+        ]
+        result = await mock_all_rails.check_async(messages)
+        assert result.status == RailStatus.BLOCKED
+
+    @pytest.mark.asyncio
+    async def test_input_pass_tool_input_blocked(self, mock_all_rails):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "tool", "content": "DANGER: exploit", "tool_call_id": "c1", "name": "get_weather"},
+        ]
+        result = await mock_all_rails.check_async(messages)
+        assert result.status == RailStatus.BLOCKED
+
+    @pytest.mark.asyncio
+    async def test_both_blocked_input_wins(self, mock_all_rails):
+        messages = [
+            {"role": "user", "content": "block"},
+            {"role": "tool", "content": "DANGER: exploit", "tool_call_id": "c1", "name": "get_weather"},
+        ]
+        result = await mock_all_rails.check_async(messages)
+        assert result.status == RailStatus.BLOCKED
+
+    @pytest.mark.asyncio
+    async def test_explicit_tool_output_skips_input(self, mock_all_rails):
+        messages = [{"role": "user", "content": "block"}, _tool_call_msg("get_weather")]
+        result = await mock_all_rails.check_async(messages, rail_types=[RailType.TOOL_OUTPUT])
+        assert result.status == RailStatus.PASSED
 
 
 @pytest.fixture

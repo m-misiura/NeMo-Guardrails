@@ -227,7 +227,13 @@ class LLMRails:
         # Last but not least, we mark all the flows that are used in any of the rails
         # as system flows (so they don't end up in the prompt).
 
-        rail_flow_ids = config.rails.input.flows + config.rails.output.flows + config.rails.retrieval.flows
+        rail_flow_ids = (
+            config.rails.input.flows
+            + config.rails.output.flows
+            + config.rails.retrieval.flows
+            + config.rails.tool_input.flows
+            + config.rails.tool_output.flows
+        )
 
         for flow_config in self.config.flows:
             if flow_config.get("id") in rail_flow_ids:
@@ -357,20 +363,18 @@ class LLMRails:
         else:
             existing_flows_names = set([flow.get("name") for flow in self.config.flows])
 
-        for flow_name in self.config.rails.input.flows:
-            # content safety check input/output flows are special as they have parameters
-            flow_name = _normalize_flow_id(flow_name)
-            if flow_name not in existing_flows_names:
-                raise InvalidRailsConfigurationError(f"The provided input rail flow `{flow_name}` does not exist")
-
-        for flow_name in self.config.rails.output.flows:
-            flow_name = _normalize_flow_id(flow_name)
-            if flow_name not in existing_flows_names:
-                raise InvalidRailsConfigurationError(f"The provided output rail flow `{flow_name}` does not exist")
-
-        for flow_name in self.config.rails.retrieval.flows:
-            if flow_name not in existing_flows_names:
-                raise InvalidRailsConfigurationError(f"The provided retrieval rail flow `{flow_name}` does not exist")
+        for rail_type, flows in [
+            ("input", self.config.rails.input.flows),
+            ("output", self.config.rails.output.flows),
+            ("retrieval", self.config.rails.retrieval.flows),
+            ("tool_input", self.config.rails.tool_input.flows),
+            ("tool_output", self.config.rails.tool_output.flows),
+        ]:
+            for flow_name in flows:
+                if _normalize_flow_id(flow_name) not in existing_flows_names:
+                    raise InvalidRailsConfigurationError(
+                        f"The provided {rail_type} rail flow `{flow_name}` does not exist"
+                    )
 
         # If both passthrough mode and single call mode are specified, we raise an exception.
         if self.config.passthrough and self.config.rails.dialog.single_call.enabled:
@@ -861,11 +865,16 @@ class LLMRails:
                 }
             ] + (messages or [])
 
-        # If the last message is from the assistant, rather than the user, then
-        # we move that to the `$bot_message` variable. This is to enable a more
-        # convenient interface. (only when dialog rails are disabled)
-        if messages and messages[-1]["role"] == "assistant" and gen_options and gen_options.rails.dialog is False:
-            # We already have the first message with a context update, so we use that
+        # If the last message is from the assistant (with text content, not
+        # tool_calls), move it to the `$bot_message` variable. This enables a
+        # more convenient interface. (only when dialog rails are disabled)
+        if (
+            messages
+            and messages[-1]["role"] == "assistant"
+            and "content" in messages[-1]
+            and gen_options
+            and gen_options.rails.dialog is False
+        ):
             messages[0]["content"]["bot_message"] = messages[-1]["content"]
             messages = messages[0:-1]
 
@@ -1456,20 +1465,21 @@ class LLMRails:
 
         When ``rail_types`` is not provided, automatically determines which rails
         to run based on message roles:
-        - Only user messages: runs input rails
-        - Only assistant messages: runs output rails
-        - Both user and assistant messages: runs both input and output rails
-        - No user/assistant messages: logs warning and returns passing result
+        - User messages → input rails
+        - Assistant messages (text) → output rails
+        - Assistant messages with ``tool_calls`` → tool output rails
+        - Tool messages (``role="tool"``) → tool input rails
+        - No actionable messages → logs warning and returns passing result
 
         When ``rail_types`` is provided, runs exactly the specified rail types,
         skipping the auto-detection logic.
 
         Args:
             messages: List of message dicts with 'role' and 'content' fields.
-                     Messages can contain any roles, but only user/assistant roles
-                     determine which rails execute when ``rail_types`` is not provided.
+                     Tool messages should include 'tool_call_id'. Assistant
+                     messages with tool calls should include a 'tool_calls' list.
             rail_types: Optional list of rail types to run, e.g.
-                  ``[RailType.INPUT]`` or ``[RailType.OUTPUT]``.
+                  ``[RailType.INPUT]``, ``[RailType.TOOL_OUTPUT]``.
                   When provided, overrides automatic detection.
 
         Returns:
@@ -1485,36 +1495,57 @@ class LLMRails:
                 if result.status == RailStatus.BLOCKED:
                     print(f"Blocked by: {result.rail}")
 
-            Check bot output with context (auto-detected)::
+            Check tool calls explicitly::
 
-                result = await rails.check_async([
-                    {"role": "user", "content": "Hello!"},
-                    {"role": "assistant", "content": "Hi there!"}
-                ])
+                result = await rails.check_async(
+                    [{"role": "user", "content": "Get weather"},
+                     {"role": "assistant", "tool_calls": [...]}],
+                    rail_types=[RailType.TOOL_OUTPUT],
+                )
 
-            Run only input rails explicitly::
+            Check tool response explicitly::
 
-                result = await rails.check_async(messages, rail_types=[RailType.INPUT])
+                result = await rails.check_async(
+                    [{"role": "user", "content": "Get weather"},
+                     {"role": "tool", "content": "72°F", "tool_call_id": "c1"}],
+                    rail_types=[RailType.TOOL_INPUT],
+                )
         """
+        fallback_content = messages[-1].get("content", "") if messages else ""
+
+        detected = _determine_rails_from_messages(messages)
+        if detected is None:
+            return RailsResult(status=RailStatus.PASSED, content=fallback_content)
+
         if rail_types is not None:
-            options: Optional[dict] = {"rails": [r.value for r in rail_types]}
+            rails_to_run = [r.value for r in rail_types if r.value in detected]
+            if not rails_to_run:
+                return RailsResult(status=RailStatus.PASSED, content=fallback_content)
         else:
-            options = _determine_rails_from_messages(messages)
+            rails_to_run = detected
 
-        if options is None:
-            last_content = messages[-1].get("content", "") if messages else ""
-            return RailsResult(status=RailStatus.PASSED, content=last_content)
+        last_result: RailsResult = RailsResult(status=RailStatus.PASSED, content=fallback_content)
+        for rail in rails_to_run:
+            result = await self._run_check_rail(messages, rail)
+            if result.status == RailStatus.BLOCKED:
+                return result
+            last_result = result
 
-        rails_to_run = options["rails"]
-        if "output" in rails_to_run:
-            original_content = _get_last_content_by_role(messages, "assistant")
-        else:
-            original_content = _get_last_content_by_role(messages, "user")
+        return last_result
 
-        messages = _normalize_messages_for_rails(messages, rails_to_run)
-        options["log"] = {"activated_rails": True}
+    async def _run_check_rail(
+        self,
+        messages: List[dict],
+        rail: str,
+    ) -> RailsResult:
+        """Run a single rail type and return the result."""
+        original_content = _get_last_content_by_role(messages, _RAIL_CONTENT_ROLE.get(rail, "user"))
 
-        response = await self.generate_async(messages=messages, options=options)
+        filtered = _filter_messages_for_rail(messages, rail)
+        normalized = _normalize_messages_for_rail(filtered, rail)
+        options = {"rails": [rail], "log": {"activated_rails": True}}
+
+        response = await self.generate_async(messages=normalized, options=options)
 
         if not isinstance(response, GenerationResponse):
             raise RuntimeError(f"Expected GenerationResponse, got {type(response).__name__}")
@@ -1525,8 +1556,14 @@ class LLMRails:
         if blocking_rail:
             return RailsResult(status=RailStatus.BLOCKED, content=result_content, rail=blocking_rail)
 
+        if rail in ("tool_input", "tool_output"):
+            if result_content:
+                return RailsResult(status=RailStatus.BLOCKED, content=result_content)
+            return RailsResult(status=RailStatus.PASSED, content=original_content)
+
         if result_content != original_content:
             return RailsResult(status=RailStatus.MODIFIED, content=result_content)
+
         return RailsResult(status=RailStatus.PASSED, content=result_content)
 
     def check(
@@ -1878,35 +1915,64 @@ class LLMRails:
                     yield chunk
 
 
-def _determine_rails_from_messages(messages: List[dict]) -> Optional[dict]:
-    roles = {msg.get("role") for msg in reversed(messages)}
-    has_user = "user" in roles
-    has_assistant = "assistant" in roles
+def _determine_rails_from_messages(messages: List[dict]) -> Optional[List[str]]:
+    has_user = has_text_assistant = has_tool_calls = has_tool = False
 
-    if not has_user and not has_assistant:
+    for msg in messages:
+        role = msg.get("role")
+        if role == "user":
+            has_user = True
+        elif role == "assistant":
+            if msg.get("tool_calls"):
+                has_tool_calls = True
+            if msg.get("content"):
+                has_text_assistant = True
+        elif role == "tool":
+            has_tool = True
+
+    rails = []
+    if has_user:
+        rails.append("input")
+    if has_text_assistant:
+        rails.append("output")
+    if has_tool_calls:
+        rails.append("tool_output")
+    if has_tool:
+        rails.append("tool_input")
+
+    if not rails:
         log.warning(
-            "check() called with no user or assistant messages. "
-            "Only system, context, or tool messages found. "
+            "check() called with no actionable messages. "
+            "Only system or context messages found. "
             "Returning passing result without running rails."
         )
         return None
 
-    if has_user and has_assistant:
-        return {"rails": ["input", "output"]}
-    if has_user:
-        return {"rails": ["input"]}
-    return {"rails": ["output"]}
+    return rails
 
 
-def _normalize_messages_for_rails(
-    messages: List[dict],
-    rails: List[str],
-) -> List[dict]:
-    if rails == ["output"]:
-        has_user = any(msg.get("role") == "user" for msg in messages)
-        if not has_user:
-            return [{"role": "user", "content": ""}] + messages
+_RAIL_CONTENT_ROLE = {
+    "input": "user",
+    "output": "assistant",
+    "tool_output": "assistant",
+    "tool_input": "tool",
+}
 
+
+def _filter_messages_for_rail(messages: List[dict], rail: str) -> List[dict]:
+    """Keep only messages relevant to a single rail type."""
+    if rail == "tool_input":
+        return [m for m in messages if not (m.get("role") == "assistant" and m.get("tool_calls"))]
+    if rail == "tool_output":
+        return [m for m in messages if m.get("role") != "tool"]
+    return [
+        m for m in messages if m.get("role") != "tool" and not (m.get("role") == "assistant" and m.get("tool_calls"))
+    ]
+
+
+def _normalize_messages_for_rail(messages: List[dict], rail: str) -> List[dict]:
+    if rail != "input" and not any(m.get("role") == "user" for m in messages):
+        return [{"role": "user", "content": ""}] + messages
     return messages
 
 

@@ -88,6 +88,8 @@ from nemoguardrails.logging.explain import LLMCallInfo
 class RailType(str, Enum):
     INPUT = "input"
     OUTPUT = "output"
+    TOOL_INPUT = "tool_input"
+    TOOL_OUTPUT = "tool_output"
 
 
 class RailStatus(str, Enum):
