@@ -33,7 +33,9 @@ from openai.types.chat.chat_completion_message import ChatCompletionMessage
 from pydantic import BaseModel, ValidationError
 from starlette.responses import RedirectResponse, StreamingResponse
 
-from nemoguardrails import LLMRails, RailsConfig, utils
+from nemoguardrails import RailsConfig, utils
+from nemoguardrails.guardrails.guardrails import Guardrails
+from nemoguardrails.guardrails.iorails import IORails
 from nemoguardrails.rails.llm.config import Model
 from nemoguardrails.rails.llm.options import GenerationResponse
 from nemoguardrails.server.datastore.datastore import DataStore
@@ -340,8 +342,8 @@ async def list_models(request: Request):
     return OpenAIModelsList(data=models)
 
 
-# One instance of LLMRails per config id
-llm_rails_instances: dict[str, LLMRails] = {}
+# One instance of Guardrails (IORails or LLMRails) per config id
+llm_rails_instances: dict[str, Guardrails] = {}
 llm_rails_events_history_cache: dict[str, dict] = {}
 
 
@@ -386,7 +388,7 @@ def _update_models_in_config(config: RailsConfig, main_model: Model) -> RailsCon
     return config.model_copy(update={"models": models})
 
 
-async def _get_rails(config_ids: List[str], model_name: Optional[str] = None) -> LLMRails:
+async def _get_rails(config_ids: List[str], model_name: Optional[str] = None) -> Guardrails:
     """Returns the rails instance for the given config id and model.
 
     Args:
@@ -444,7 +446,12 @@ async def _get_rails(config_ids: List[str], model_name: Optional[str] = None) ->
         main_model = Model(model=model_name, type="main", engine=engine, parameters=parameters)
         full_llm_rails_config = _update_models_in_config(full_llm_rails_config, main_model)
 
-    llm_rails = LLMRails(config=full_llm_rails_config, verbose=True)
+    llm_rails = Guardrails(config=full_llm_rails_config)
+    await llm_rails.startup()
+
+    engine_type = "IORails" if isinstance(llm_rails.rails_engine, IORails) else "LLMRails"
+    log.info("Created %s instance for config key: %s", engine_type, configs_cache_key)
+
     llm_rails_instances[configs_cache_key] = llm_rails
 
     # If we have a cache for the events, we restore it

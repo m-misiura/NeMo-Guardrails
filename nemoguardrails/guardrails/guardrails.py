@@ -38,8 +38,16 @@ log = logging.getLogger(__name__)
 
 # Set with flows supported by the IORailsEngine
 IORAILS_RAILS = {"input", "output", "config"}
-IORAILS_INPUT_FLOWS = {"content safety check input", "topic safety check input", "jailbreak detection model"}
-IORAILS_OUTPUT_FLOWS = {"content safety check output"}
+IORAILS_INPUT_FLOWS = {
+    "content safety check input",
+    "topic safety check input",
+    "jailbreak detection model",
+    "hf classifier check input",
+}
+IORAILS_OUTPUT_FLOWS = {
+    "content safety check output",
+    "hf classifier check output",
+}
 
 
 class Guardrails:
@@ -74,6 +82,17 @@ class Guardrails:
     def rails_engine(self) -> IORails | LLMRails:
         """Get immutable LLMRails object"""
         return self._rails_engine
+
+    @property
+    def events_history_cache(self) -> dict:
+        if isinstance(self._rails_engine, LLMRails):
+            return self._rails_engine.events_history_cache
+        return {}
+
+    @events_history_cache.setter
+    def events_history_cache(self, value: dict) -> None:
+        if isinstance(self._rails_engine, LLMRails):
+            self._rails_engine.events_history_cache = value
 
     @staticmethod
     def _convert_to_messages(prompt: str | None = None, messages: LLMMessages | None = None) -> LLMMessages:

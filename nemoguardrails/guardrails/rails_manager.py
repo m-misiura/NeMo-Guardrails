@@ -30,6 +30,10 @@ from nemoguardrails.guardrails.actions.content_safety_action import (
     ContentSafetyInputAction,
     ContentSafetyOutputAction,
 )
+from nemoguardrails.guardrails.actions.hf_classifier_action import (
+    HFClassifierInputAction,
+    HFClassifierOutputAction,
+)
 from nemoguardrails.guardrails.actions.jailbreak_detection_action import JailbreakDetectionAction
 from nemoguardrails.guardrails.actions.topic_safety_action import TopicSafetyInputAction
 from nemoguardrails.guardrails.engine_registry import EngineRegistry
@@ -56,6 +60,8 @@ _ACTION_CLASSES: dict[str, type[RailAction]] = {
         ContentSafetyOutputAction,
         TopicSafetyInputAction,
         JailbreakDetectionAction,
+        HFClassifierInputAction,
+        HFClassifierOutputAction,
     ]
 }
 
