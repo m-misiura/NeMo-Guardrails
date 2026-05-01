@@ -113,7 +113,13 @@ class Guardrails:
         raise ValueError("Neither prompt nor messages provided for generation")
 
     def _has_only_iorails_flows(self):
-        """Check if all the flows in the config can be supported by IORails"""
+        """Check if all the flows in the config can be supported by IORails.
+
+        IORails is opt-in: at least one rail group must have parallel=True.
+        """
+
+        if not (self.config.rails.input.parallel or self.config.rails.output.parallel):
+            return False
 
         # If we have any rails outside of `input` and `output` we don't support them
         rails_set = self.config.rails.model_fields_set

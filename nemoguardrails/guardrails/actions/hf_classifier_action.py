@@ -79,7 +79,8 @@ class HFClassifierInputAction(RailAction):
         return extracted["text"]
 
     async def _get_response(self, model_type: Optional[str], prompt: Any) -> Any:
-        assert model_type is not None
+        if model_type is None:
+            raise RuntimeError("No $classifier= parameter found in flow")
         return await _call_classifier(self.task_manager, model_type, prompt)
 
     def _parse_response(self, response: Any) -> RailResult:
@@ -102,7 +103,8 @@ class HFClassifierOutputAction(RailAction):
         return extracted["text"]
 
     async def _get_response(self, model_type: Optional[str], prompt: Any) -> Any:
-        assert model_type is not None
+        if model_type is None:
+            raise RuntimeError("No $classifier= parameter found in flow")
         return await _call_classifier(self.task_manager, model_type, prompt)
 
     def _parse_response(self, response: Any) -> RailResult:
