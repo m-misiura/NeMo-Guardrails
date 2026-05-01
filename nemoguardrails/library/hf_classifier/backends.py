@@ -27,7 +27,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, TypedDict, Union
 import aiohttp
 
 if TYPE_CHECKING:
-    from nemoguardrails.rails.llm.config import HFClassifierConfig
+    from nemoguardrails.rails.llm.config import (
+        HFClassifierConfig,
+        LocalHFClassifierConfig,
+        RemoteHFClassifierConfig,
+    )
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +54,7 @@ _DEFAULT_TIMEOUT = 30.0
 _warned_env_vars: set = set()
 
 
-def _build_headers(config: HFClassifierConfig) -> Dict[str, str]:
+def _build_headers(config: RemoteHFClassifierConfig) -> Dict[str, str]:
     """Build HTTP request headers from classifier config."""
     headers: Dict[str, str] = {"Content-Type": "application/json"}
 
@@ -74,7 +78,7 @@ def _build_headers(config: HFClassifierConfig) -> Dict[str, str]:
     return headers
 
 
-def _get_timeout(config: HFClassifierConfig) -> aiohttp.ClientTimeout:
+def _get_timeout(config: RemoteHFClassifierConfig) -> aiohttp.ClientTimeout:
     total = config.parameters.get("timeout", _DEFAULT_TIMEOUT)
     return aiohttp.ClientTimeout(total=total)
 
@@ -83,7 +87,7 @@ _ssl_cache: Dict[tuple, Union[ssl.SSLContext, bool, None]] = {}
 
 
 def _build_ssl_context(
-    config: HFClassifierConfig,
+    config: RemoteHFClassifierConfig,
 ) -> Union[ssl.SSLContext, bool, None]:
     """Build SSL context from config parameters (cached).
 
@@ -115,7 +119,9 @@ def _build_ssl_context(
         _ssl_cache[cache_key] = None
         return None
 
-    ctx = ssl.create_default_context(cafile=ca_cert)
+    ctx = ssl.create_default_context()
+    if ca_cert:
+        ctx.load_verify_locations(cafile=ca_cert)
     if client_cert:
         ctx.load_cert_chain(certfile=client_cert, keyfile=client_key)
     _ssl_cache[cache_key] = ctx
@@ -123,18 +129,25 @@ def _build_ssl_context(
 
 
 _pipelines: Dict[str, Any] = {}
-_HTTP_ONLY_PARAMS = frozenset({
-    "default_headers", "timeout", "verify_ssl", "ca_cert", "client_cert", "client_key",
-})
+_HTTP_ONLY_PARAMS = frozenset(
+    {
+        "default_headers",
+        "timeout",
+        "verify_ssl",
+        "ca_cert",
+        "client_cert",
+        "client_key",
+    }
+)
 
 
 def _get_or_create_pipeline(
     model_name: str,
     task: str,
-    aggregation_strategy: Optional[str],
     parameters: Dict[str, Any],
 ) -> Any:
-    cache_key = f"{task}:{model_name}:{aggregation_strategy}"
+    agg = parameters.get("aggregation_strategy")
+    cache_key = f"{task}:{model_name}:{agg}"
     if cache_key not in _pipelines:
         try:
             from transformers import pipeline
@@ -144,8 +157,6 @@ def _get_or_create_pipeline(
                 "backend. Install it with: pip install nemoguardrails[hf-classifier]"
             )
         kwargs = {k: v for k, v in parameters.items() if k not in _HTTP_ONLY_PARAMS}
-        if task == "token-classification" and aggregation_strategy:
-            kwargs["aggregation_strategy"] = aggregation_strategy
         _pipelines[cache_key] = pipeline(task=task, model=model_name, **kwargs)
         log.info("Loaded HF pipeline: task=%s model=%s", task, model_name)
     return _pipelines[cache_key]
@@ -158,14 +169,13 @@ class LocalBackend(ClassifierBackend):
     ``text-classification`` and ``token-classification`` tasks.
     """
 
-    def __init__(self, config: HFClassifierConfig) -> None:
+    def __init__(self, config: LocalHFClassifierConfig) -> None:
         self._config = config
 
     async def classify(self, text: str) -> List[ClassificationResult]:
         pipe = _get_or_create_pipeline(
             self._config.model_name,
             self._config.task,
-            self._config.aggregation_strategy,
             self._config.parameters,
         )
         loop = asyncio.get_running_loop()
@@ -192,7 +202,7 @@ class VLLMBackend(ClassifierBackend):
     ``label``), indicating an API change.
     """
 
-    def __init__(self, config: HFClassifierConfig) -> None:
+    def __init__(self, config: RemoteHFClassifierConfig) -> None:
         self._url = config.endpoint.rstrip("/") + "/classify"
         self._model_name = config.model_name
         self._headers = _build_headers(config)
@@ -212,25 +222,21 @@ class VLLMBackend(ClassifierBackend):
         try:
             items = data["data"]
         except (KeyError, TypeError) as exc:
-            raise ValueError(
-                f"Unexpected vLLM /classify response structure: {exc}. "
-                f"Raw: {str(data)[:500]}"
-            ) from exc
+            raise ValueError(f"Unexpected vLLM /classify response structure: {exc}. Raw: {str(data)[:500]}") from exc
 
         results: List[ClassificationResult] = []
         for item in items:
             try:
                 label = item["label"]
             except (KeyError, TypeError) as exc:
-                raise ValueError(
-                    f"vLLM /classify item missing 'label': {exc}. "
-                    f"Raw item: {str(item)[:200]}"
-                ) from exc
+                raise ValueError(f"vLLM /classify item missing 'label': {exc}. Raw item: {str(item)[:200]}") from exc
             probs = item.get("probs", [])
-            results.append(ClassificationResult(
-                label=label,
-                score=max(probs) if probs else 1.0,
-            ))
+            results.append(
+                ClassificationResult(
+                    label=label,
+                    score=max(probs) if probs else 1.0,
+                )
+            )
         return results
 
 
@@ -248,7 +254,7 @@ class KServeBackend(ClassifierBackend):
     has an unrecognised type.
     """
 
-    def __init__(self, config: HFClassifierConfig) -> None:
+    def __init__(self, config: RemoteHFClassifierConfig) -> None:
         base = config.endpoint.rstrip("/")
         self._url = f"{base}/v1/models/{config.model_name}:predict"
         self._headers = _build_headers(config)
@@ -268,33 +274,20 @@ class KServeBackend(ClassifierBackend):
         try:
             predictions = data["predictions"]
         except (KeyError, TypeError) as exc:
-            raise ValueError(
-                f"Unexpected KServe predict response structure: {exc}. "
-                f"Raw: {str(data)[:500]}"
-            ) from exc
+            raise ValueError(f"Unexpected KServe predict response structure: {exc}. Raw: {str(data)[:500]}") from exc
 
         if not predictions:
             return []
 
         pred = predictions[0]
         if isinstance(pred, dict):
-            return [
-                ClassificationResult(label=cls_idx, score=float(score))
-                for cls_idx, score in pred.items()
-            ]
+            return [ClassificationResult(label=cls_idx, score=float(score)) for cls_idx, score in pred.items()]
         if isinstance(pred, (int, float)):
             return [ClassificationResult(label=str(int(pred)), score=1.0)]
         if isinstance(pred, list):
             flat = _flatten_ints(pred)
-            return [
-                ClassificationResult(label=str(cls), score=1.0)
-                for cls in sorted(set(flat))
-                if cls != 0
-            ]
-        raise ValueError(
-            f"Unexpected KServe prediction type: {type(pred).__name__}. "
-            f"Raw: {str(data)[:500]}"
-        )
+            return [ClassificationResult(label=str(cls), score=1.0) for cls in sorted(set(flat)) if cls != 0]
+        raise ValueError(f"Unexpected KServe prediction type: {type(pred).__name__}. Raw: {str(data)[:500]}")
 
 
 def _flatten_ints(nested: Any) -> List[int]:
@@ -317,7 +310,7 @@ class FMSBackend(ClassifierBackend):
     entries lack required keys.
     """
 
-    def __init__(self, config: HFClassifierConfig) -> None:
+    def __init__(self, config: RemoteHFClassifierConfig) -> None:
         self._url = config.endpoint.rstrip("/") + "/api/v1/text/contents"
         self._threshold = config.threshold
         self._headers = _build_headers(config)
@@ -337,25 +330,22 @@ class FMSBackend(ClassifierBackend):
                     raise ValueError(f"FMS detectors returned {resp.status}: {body[:500]}")
                 data = await resp.json()
 
-        if not isinstance(data, list) or not data:
+        try:
+            (detections,) = data
+        except (TypeError, ValueError):
             raise ValueError(
-                f"Unexpected FMS response structure (expected list of lists). "
-                f"Raw: {str(data)[:500]}"
+                f"Unexpected FMS response structure (expected [[...]] for single content). Raw: {str(data)[:500]}"
             )
 
-        if not data[0]:
+        if not isinstance(detections, list):
+            raise ValueError(f"Unexpected FMS response structure (inner element is not a list). Raw: {str(data)[:500]}")
+        if not detections:
             return []
 
         try:
-            return [
-                ClassificationResult(label=d["detection_type"], score=d["score"])
-                for d in data[0]
-            ]
+            return [ClassificationResult(label=d["detection_type"], score=d["score"]) for d in detections]
         except (KeyError, TypeError) as exc:
-            raise ValueError(
-                f"Unexpected FMS detection entry structure: {exc}. "
-                f"Raw: {str(data)[:500]}"
-            ) from exc
+            raise ValueError(f"Unexpected FMS detection entry structure: {exc}. Raw: {str(data)[:500]}") from exc
 
 
 _BACKENDS = {
@@ -370,8 +360,5 @@ def get_backend(config: HFClassifierConfig) -> ClassifierBackend:
     """Create a backend instance from classifier config."""
     cls = _BACKENDS.get(config.backend)
     if cls is None:
-        raise ValueError(
-            f"Unknown hf_classifier backend: '{config.backend}'. "
-            f"Supported: {', '.join(_BACKENDS)}"
-        )
+        raise ValueError(f"Unknown hf_classifier backend: '{config.backend}'. Supported: {', '.join(_BACKENDS)}")
     return cls(config)

@@ -374,6 +374,90 @@ class GLiNERDetection(BaseModel):
     )
 
 
+class _HFClassifierBase(BaseModel):
+    """Shared fields for all HuggingFace classifier backends."""
+
+    model_name: str = Field(
+        description="HF model ID, local path, or server-side model identifier.",
+    )
+    threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum score for a detection to trigger blocking.",
+    )
+    blocked_labels: List[str] = Field(
+        default_factory=list,
+        description="Labels that should trigger blocking when detected above threshold.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_common(self) -> "_HFClassifierBase":
+        if not self.blocked_labels:
+            log.warning(
+                "HFClassifierConfig '%s': blocked_labels is empty — this classifier will never block anything.",
+                self.model_name,
+            )
+        return self
+
+
+class LocalHFClassifierConfig(_HFClassifierBase):
+    """Configuration for a local HuggingFace Transformers pipeline classifier."""
+
+    backend: Literal["local"] = "local"
+    task: Literal["text-classification", "token-classification"] = Field(
+        default="text-classification",
+        description="HuggingFace pipeline task type.",
+    )
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Forwarded as kwargs to transformers.pipeline() "
+        "(e.g. device, dtype, trust_remote_code, token, revision, "
+        "aggregation_strategy).",
+    )
+
+    @model_validator(mode="after")
+    def _validate_local(self) -> "LocalHFClassifierConfig":
+        agg = self.parameters.get("aggregation_strategy")
+        if agg and self.task != "token-classification":
+            raise ValueError("aggregation_strategy is only valid when task is 'token-classification'.")
+        return self
+
+
+class RemoteHFClassifierConfig(_HFClassifierBase):
+    """Configuration for a remote HuggingFace classifier (vLLM, KServe, FMS)."""
+
+    backend: Literal["vllm", "kserve", "fms"]
+    endpoint: str = Field(
+        description="Base URL for the inference server (e.g. 'http://host:8000').",
+    )
+    api_key_env_var: Optional[str] = Field(
+        default=None,
+        description="Environment variable name holding the API key. "
+        "Resolved at runtime to an Authorization: Bearer header.",
+    )
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Remote backend parameters: 'default_headers' (Dict[str, str]), "
+        "'timeout' (float, seconds), 'verify_ssl' (bool), "
+        "'ca_cert'/'client_cert'/'client_key' (str, paths).",
+    )
+
+    @model_validator(mode="after")
+    def _validate_remote(self) -> "RemoteHFClassifierConfig":
+        if not self.endpoint.startswith(("http://", "https://")):
+            raise ValueError(f"endpoint must start with 'http://' or 'https://', got '{self.endpoint}'")
+        if self.parameters.get("verify_ssl") is False:
+            log.warning(
+                "HFClassifierConfig '%s': TLS verification is disabled.",
+                self.model_name,
+            )
+        return self
+
+
+HFClassifierConfig = Union[LocalHFClassifierConfig, RemoteHFClassifierConfig]
+
+
 class FiddlerGuardrails(BaseModel):
     """Configuration for Fiddler Guardrails."""
 
@@ -1160,6 +1244,11 @@ class RailsConfigData(BaseModel):
     content_safety: Optional[ContentSafetyConfig] = Field(
         default_factory=ContentSafetyConfig,
         description="Configuration for content safety rails.",
+    )
+
+    hf_classifier: Optional[Dict[str, HFClassifierConfig]] = Field(
+        default=None,
+        description="Named HF classifier configurations. Keys are classifier names referenced by flows.",
     )
 
 
