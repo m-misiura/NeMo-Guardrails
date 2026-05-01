@@ -20,12 +20,13 @@ import os
 import re
 import warnings
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Set, Tuple, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Set, Tuple, Union
 
 import yaml
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Discriminator,
     Field,
     PrivateAttr,
     SecretStr,
@@ -455,7 +456,10 @@ class RemoteHFClassifierConfig(_HFClassifierBase):
         return self
 
 
-HFClassifierConfig = Union[LocalHFClassifierConfig, RemoteHFClassifierConfig]
+HFClassifierConfig = Annotated[
+    Union[LocalHFClassifierConfig, RemoteHFClassifierConfig],
+    Discriminator("backend"),
+]
 
 
 class FiddlerGuardrails(BaseModel):

@@ -26,7 +26,14 @@ from aioresponses import aioresponses
 from pydantic import ValidationError
 
 from nemoguardrails.library.hf_classifier import backends as backends_mod
-from nemoguardrails.library.hf_classifier.actions import _classify_and_check
+from nemoguardrails.library.hf_classifier.actions import (
+    _classify_and_check,
+    hf_classifier_check_input,
+    hf_classifier_check_output,
+    hf_classifier_check_retrieval,
+    hf_classifier_check_tool_input,
+    hf_classifier_check_tool_output,
+)
 from nemoguardrails.library.hf_classifier.backends import (
     ClassificationResult,
     FMSBackend,
@@ -78,8 +85,7 @@ def _clear_caches():
 
 class TestConfig:
     def test_local_has_no_endpoint(self):
-        c = _local()
-        assert not hasattr(c, "endpoint") or c.model_fields.get("endpoint") is None
+        assert "endpoint" not in LocalHFClassifierConfig.model_fields
 
     @pytest.mark.parametrize("backend", ["vllm", "kserve", "fms"])
     def test_remote_requires_endpoint(self, backend):
@@ -156,8 +162,12 @@ class TestSSLTimeout:
         assert _build_ssl_context(_remote(parameters={"verify_ssl": False})) is False
 
     def test_ssl_cached(self):
-        c = _remote(parameters={"verify_ssl": False})
-        assert _build_ssl_context(c) is _build_ssl_context(c)
+        with mock.patch("nemoguardrails.library.hf_classifier.backends.ssl") as mock_ssl:
+            c = _remote(parameters={"ca_cert": "/ca.pem"})
+            first = _build_ssl_context(c)
+            second = _build_ssl_context(c)
+            assert first is second
+            mock_ssl.create_default_context.assert_called_once()
 
 
 class TestLocalBackend:
@@ -393,3 +403,206 @@ class TestClassifyAndCheck:
                 result = await _classify_and_check("t", "text", _rails_cfg("t", c))
         assert result is True
         assert "returned no results" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_empty_text_no_warning(self, caplog):
+        c = _remote(threshold=0.5, blocked_labels=["toxic"])
+        with self._patch([]):
+            with caplog.at_level(logging.WARNING):
+                result = await _classify_and_check("t", "", _rails_cfg("t", c))
+        assert result is True
+        assert "returned no results" not in caplog.text
+
+
+class TestActionContextKeys:
+    def _patch(self, results):
+        return mock.patch(
+            "nemoguardrails.library.hf_classifier.actions.get_backend",
+            return_value=mock.AsyncMock(classify=mock.AsyncMock(return_value=results)),
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "action_fn,context_key",
+        [
+            (hf_classifier_check_input, "user_message"),
+            (hf_classifier_check_output, "bot_message"),
+            (hf_classifier_check_retrieval, "relevant_chunks"),
+            (hf_classifier_check_tool_input, "tool_message"),
+        ],
+    )
+    async def test_reads_correct_context_key(self, action_fn, context_key):
+        c = _remote(threshold=0.5, blocked_labels=["toxic"])
+        cfg = _rails_cfg("t", c)
+        with self._patch([ClassificationResult(label="toxic", score=0.9)]) as p:
+            await action_fn(classifier="t", config=cfg, context={context_key: "bad"})
+            p.return_value.classify.assert_called_once_with("bad")
+
+    @pytest.mark.asyncio
+    async def test_tool_output_reads_tool_calls(self):
+        c = _remote(threshold=0.5, blocked_labels=["toxic"])
+        cfg = _rails_cfg("t", c)
+        calls = [{"function": {"name": "rm", "arguments": {}}, "id": "1"}]
+        with self._patch([ClassificationResult(label="safe", score=0.1)]) as p:
+            await hf_classifier_check_tool_output(
+                classifier="t",
+                tool_calls=calls,
+                config=cfg,
+                context={},
+            )
+            text_arg = p.return_value.classify.call_args[0][0]
+            assert "rm" in text_arg
+
+    @pytest.mark.asyncio
+    async def test_tool_output_falls_back_to_context(self):
+        c = _remote(threshold=0.5, blocked_labels=["toxic"])
+        cfg = _rails_cfg("t", c)
+        calls = [{"function": {"name": "eval"}, "id": "2"}]
+        with self._patch([ClassificationResult(label="safe", score=0.1)]) as p:
+            await hf_classifier_check_tool_output(
+                classifier="t",
+                config=cfg,
+                context={"tool_calls": calls},
+            )
+            text_arg = p.return_value.classify.call_args[0][0]
+            assert "eval" in text_arg
+
+    @pytest.mark.asyncio
+    async def test_none_context_defaults_to_empty(self):
+        c = _remote(threshold=0.5, blocked_labels=["toxic"])
+        cfg = _rails_cfg("t", c)
+        with self._patch([]):
+            result = await hf_classifier_check_input(
+                classifier="t",
+                config=cfg,
+                context=None,
+            )
+        assert result is True
+
+
+class TestSSLCerts:
+    def test_ca_cert(self):
+        with mock.patch("nemoguardrails.library.hf_classifier.backends.ssl") as mock_ssl:
+            ctx = mock_ssl.create_default_context.return_value
+            c = _remote(parameters={"ca_cert": "/ca.pem"})
+            result = _build_ssl_context(c)
+            assert result is ctx
+            ctx.load_verify_locations.assert_called_once_with(cafile="/ca.pem")
+
+    def test_mtls(self):
+        with mock.patch("nemoguardrails.library.hf_classifier.backends.ssl") as mock_ssl:
+            ctx = mock_ssl.create_default_context.return_value
+            c = _remote(parameters={"client_cert": "/cert.pem", "client_key": "/key.pem"})
+            result = _build_ssl_context(c)
+            assert result is ctx
+            ctx.load_cert_chain.assert_called_once_with(certfile="/cert.pem", keyfile="/key.pem")
+
+    def test_ca_cert_plus_mtls(self):
+        with mock.patch("nemoguardrails.library.hf_classifier.backends.ssl") as mock_ssl:
+            ctx = mock_ssl.create_default_context.return_value
+            c = _remote(
+                parameters={
+                    "ca_cert": "/ca.pem",
+                    "client_cert": "/cert.pem",
+                    "client_key": "/key.pem",
+                }
+            )
+            result = _build_ssl_context(c)
+            ctx.load_verify_locations.assert_called_once_with(cafile="/ca.pem")
+            ctx.load_cert_chain.assert_called_once_with(certfile="/cert.pem", keyfile="/key.pem")
+            assert result is ctx
+
+
+class TestKServeErrors:
+    _URL = "http://ks:8080/v1/models/m:predict"
+
+    def _backend(self):
+        return KServeBackend(_remote(backend="kserve", endpoint="http://ks:8080", model_name="m"))
+
+    @pytest.mark.asyncio
+    async def test_non_200(self):
+        with aioresponses() as m:
+            m.post(self._URL, status=500, body="error")
+            with pytest.raises(ValueError, match="KServe predict returned 500"):
+                await self._backend().classify("text")
+
+    @pytest.mark.asyncio
+    async def test_missing_predictions_key(self):
+        with aioresponses() as m:
+            m.post(self._URL, payload={"wrong": []})
+            with pytest.raises(ValueError, match="Unexpected KServe predict response"):
+                await self._backend().classify("text")
+
+
+class TestFMSEdgeCases:
+    _URL = "http://fms:9000/api/v1/text/contents"
+
+    def _backend(self):
+        return FMSBackend(_remote(backend="fms", endpoint="http://fms:9000"))
+
+    @pytest.mark.asyncio
+    async def test_inner_not_a_list(self):
+        with aioresponses() as m:
+            m.post(self._URL, payload=[42])
+            with pytest.raises(ValueError, match="Unexpected FMS response"):
+                await self._backend().classify("text")
+
+    @pytest.mark.asyncio
+    async def test_malformed_detection_entry(self):
+        with aioresponses() as m:
+            m.post(self._URL, payload=[[{"wrong_key": "x"}]])
+            with pytest.raises(ValueError, match="Unexpected FMS detection entry"):
+                await self._backend().classify("text")
+
+
+class TestLocalImportError:
+    @pytest.mark.asyncio
+    async def test_missing_transformers(self):
+        c = _local()
+        with mock.patch.dict("sys.modules", {"transformers": None}):
+            with pytest.raises(ImportError, match="transformers"):
+                await LocalBackend(c).classify("text")
+
+
+class TestDiscriminatedUnion:
+    def test_local_backend_resolves(self):
+        from pydantic import TypeAdapter
+
+        from nemoguardrails.rails.llm.config import HFClassifierConfig
+
+        ta = TypeAdapter(HFClassifierConfig)
+        c = ta.validate_python({"backend": "local", "model_name": "m", "blocked_labels": ["x"]})
+        assert isinstance(c, LocalHFClassifierConfig)
+
+    def test_remote_backend_resolves(self):
+        from pydantic import TypeAdapter
+
+        from nemoguardrails.rails.llm.config import HFClassifierConfig
+
+        ta = TypeAdapter(HFClassifierConfig)
+        c = ta.validate_python(
+            {
+                "backend": "vllm",
+                "model_name": "m",
+                "endpoint": "http://x:8000",
+                "blocked_labels": ["x"],
+            }
+        )
+        assert isinstance(c, RemoteHFClassifierConfig)
+
+    def test_invalid_backend_rejected(self):
+        from pydantic import TypeAdapter
+        from pydantic import ValidationError as PydanticValidationError
+
+        from nemoguardrails.rails.llm.config import HFClassifierConfig
+
+        ta = TypeAdapter(HFClassifierConfig)
+        with pytest.raises(PydanticValidationError, match="backend"):
+            ta.validate_python({"backend": "bogus", "model_name": "m", "blocked_labels": ["x"]})
+
+    def test_task_default(self):
+        c = _local()
+        assert c.task == "text-classification"
+
+    def test_remote_has_no_task(self):
+        assert "task" not in RemoteHFClassifierConfig.model_fields

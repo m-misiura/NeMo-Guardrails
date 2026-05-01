@@ -15,8 +15,9 @@
 
 """HuggingFace classifier-based detection actions."""
 
+import json
 import logging
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions import action
@@ -43,10 +44,7 @@ async def _classify_and_check(
 
     classifier_config = classifiers.get(classifier_name)
     if classifier_config is None:
-        raise ValueError(
-            f"Unknown classifier '{classifier_name}'. "
-            f"Available: {list(classifiers)}"
-        )
+        raise ValueError(f"Unknown classifier '{classifier_name}'. Available: {list(classifiers)}")
 
     backend = get_backend(classifier_config)
     results = await backend.classify(text)
@@ -63,9 +61,7 @@ async def _classify_and_check(
     threshold = classifier_config.threshold
 
     triggered: List[Tuple[str, float]] = [
-        (r["label"], r["score"])
-        for r in results
-        if r["label"] in blocked and r["score"] >= threshold
+        (r["label"], r["score"]) for r in results if r["label"] in blocked and r["score"] >= threshold
     ]
 
     if triggered:
@@ -131,10 +127,12 @@ async def hf_classifier_check_tool_input(
 @action(is_system_action=True)
 async def hf_classifier_check_tool_output(
     classifier: str,
+    tool_calls: Optional[Any] = None,
     config: Optional[RailsConfig] = None,
     context: Optional[dict] = None,
     **kwargs,
 ) -> bool:
     """Check tool output against a HuggingFace classifier."""
-    text = context.get("bot_message", "") if context else ""
+    calls = tool_calls or (context.get("tool_calls", []) if context else [])
+    text = json.dumps(calls) if calls else ""
     return await _classify_and_check(classifier, text, config)
