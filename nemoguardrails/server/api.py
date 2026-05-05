@@ -92,6 +92,96 @@ api_request_headers: contextvars.ContextVar = contextvars.ContextVar("headers")
 datastore: Optional[DataStore] = None
 
 
+_PREWARM_TIMEOUT = int(os.environ.get("HF_CLASSIFIER_LOAD_TIMEOUT", "300"))
+
+
+def _prewarm_local_hf_classifiers(app: GuardrailsApp) -> None:
+    """Eagerly load local HF classifier pipelines so model downloads
+    happen at startup, not on the first request.
+
+    Each pipeline load runs with a timeout (HF_CLASSIFIER_LOAD_TIMEOUT env var,
+    default 300s).  On failure or timeout a sentinel is stored in the pipeline
+    cache so that classify() raises immediately instead of retrying.
+    """
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+
+    from nemoguardrails.library.hf_classifier.backends import (
+        _get_or_create_pipeline,
+        _pipeline_cache_key,
+        _PipelineLoadError,
+        _pipelines,
+    )
+    from nemoguardrails.rails.llm.config import LocalHFClassifierConfig
+
+    if app.single_config_mode:
+        config_paths = [app.rails_config_path]
+    else:
+        config_paths = [
+            os.path.join(app.rails_config_path, f)
+            for f in os.listdir(app.rails_config_path)
+            if os.path.isdir(os.path.join(app.rails_config_path, f))
+            and f[0] != "."
+            and f[0] != "_"
+            and _has_config_file(os.path.join(app.rails_config_path, f))
+        ]
+
+    pending: list[tuple[str, str, str, dict]] = []
+    for config_path in config_paths:
+        try:
+            rails_config = RailsConfig.from_path(config_path)
+        except Exception:
+            log.warning("Failed to parse config at %s, skipping pre-warm", config_path, exc_info=True)
+            continue
+
+        hf_classifiers = getattr(rails_config.rails.config, "hf_classifier", None)
+        if not hf_classifiers:
+            continue
+
+        for name, cfg in hf_classifiers.items():
+            if not isinstance(cfg, LocalHFClassifierConfig):
+                continue
+            pending.append((name, cfg.model_name, cfg.task, cfg.parameters))
+
+    if not pending:
+        return
+
+    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", str(_PREWARM_TIMEOUT))
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        for name, model_name, task, parameters in pending:
+            cache_key = _pipeline_cache_key(model_name, task, parameters)
+            try:
+                future = executor.submit(
+                    _get_or_create_pipeline,
+                    model_name,
+                    task,
+                    parameters,
+                )
+                future.result(timeout=_PREWARM_TIMEOUT)
+            except TimeoutError:
+                msg = f"Timed out after {_PREWARM_TIMEOUT}s loading model '{model_name}'"
+                log.error(
+                    "HF classifier '%s': %s. For air-gapped environments set "
+                    "HF_HUB_OFFLINE=1 and ensure the model is cached, or use "
+                    "model_name as a local filesystem path.",
+                    name,
+                    msg,
+                )
+                _pipelines[cache_key] = _PipelineLoadError(msg)
+            except Exception as exc:
+                msg = f"{type(exc).__name__}: {exc}"
+                log.error(
+                    "HF classifier '%s': failed to load model '%s': %s",
+                    name,
+                    model_name,
+                    msg,
+                )
+                _pipelines[cache_key] = _PipelineLoadError(msg)
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 @asynccontextmanager
 async def lifespan(app: GuardrailsApp):
     # Startup logic here
@@ -128,6 +218,8 @@ async def lifespan(app: GuardrailsApp):
             # If there is an `init` function, we call it with the reference to the app.
             if config_module is not None and hasattr(config_module, "init"):
                 config_module.init(app)
+
+    _prewarm_local_hf_classifiers(app)
 
     if app.auto_reload:
         app.loop = asyncio.get_running_loop()

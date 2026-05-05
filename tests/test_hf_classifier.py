@@ -397,7 +397,7 @@ class TestClassifyAndCheck:
 
     @pytest.mark.asyncio
     async def test_empty_results_warns(self, caplog):
-        c = _remote(threshold=0.5, blocked_labels=["toxic"])
+        c = _local(threshold=0.5, blocked_labels=["toxic"])
         with self._patch([]):
             with caplog.at_level(logging.WARNING):
                 result = await _classify_and_check("t", "text", _rails_cfg("t", c))
@@ -606,3 +606,129 @@ class TestDiscriminatedUnion:
 
     def test_remote_has_no_task(self):
         assert "task" not in RemoteHFClassifierConfig.model_fields
+
+
+class TestPrewarmLocalClassifiers:
+    def _make_app(self, tmp_path, configs):
+        """Create a mock GuardrailsApp with config directories."""
+        for name, yml in configs.items():
+            d = tmp_path / name
+            d.mkdir()
+            (d / "config.yml").write_text(yml)
+
+        app = SimpleNamespace(
+            rails_config_path=str(tmp_path),
+            single_config_mode=False,
+            single_config_id=None,
+        )
+        return app
+
+    _LOCAL_YML = """
+models: []
+rails:
+  config:
+    hf_classifier:
+      ner:
+        backend: local
+        model_name: test-ner-model
+        task: token-classification
+        blocked_labels: ["PER"]
+        parameters:
+          aggregation_strategy: simple
+"""
+
+    _REMOTE_YML = """
+models: []
+rails:
+  config:
+    hf_classifier:
+      hap:
+        backend: vllm
+        model_name: hap-model
+        endpoint: "http://vllm:8000"
+        blocked_labels: ["toxic"]
+"""
+
+    _NO_HF_YML = """
+models: []
+"""
+
+    def test_preloads_local_skips_remote(self, tmp_path):
+        from nemoguardrails.server.api import _prewarm_local_hf_classifiers
+
+        app = self._make_app(tmp_path, {"local_cfg": self._LOCAL_YML, "remote_cfg": self._REMOTE_YML})
+        with mock.patch("nemoguardrails.library.hf_classifier.backends._get_or_create_pipeline") as mock_pipeline:
+            _prewarm_local_hf_classifiers(app)
+            mock_pipeline.assert_called_once()
+            args = mock_pipeline.call_args
+            assert args[0][0] == "test-ner-model"
+            assert args[0][1] == "token-classification"
+
+    def test_skips_configs_without_hf_classifier(self, tmp_path):
+        from nemoguardrails.server.api import _prewarm_local_hf_classifiers
+
+        app = self._make_app(tmp_path, {"plain": self._NO_HF_YML})
+        with mock.patch("nemoguardrails.library.hf_classifier.backends._get_or_create_pipeline") as mock_pipeline:
+            _prewarm_local_hf_classifiers(app)
+            mock_pipeline.assert_not_called()
+
+    def test_continues_on_broken_config(self, tmp_path):
+        from nemoguardrails.server.api import _prewarm_local_hf_classifiers
+
+        bad = tmp_path / "broken"
+        bad.mkdir()
+        (bad / "config.yml").write_text("invalid: {yaml: [")
+        app = self._make_app(tmp_path, {"good": self._LOCAL_YML})
+        (tmp_path / "broken").exists()
+
+        with mock.patch("nemoguardrails.library.hf_classifier.backends._get_or_create_pipeline") as mock_pipeline:
+            _prewarm_local_hf_classifiers(app)
+            mock_pipeline.assert_called_once()
+
+    def test_single_config_mode(self, tmp_path):
+        from nemoguardrails.server.api import _prewarm_local_hf_classifiers
+
+        (tmp_path / "config.yml").write_text(self._LOCAL_YML)
+        app = SimpleNamespace(
+            rails_config_path=str(tmp_path),
+            single_config_mode=True,
+            single_config_id="test",
+        )
+        with mock.patch("nemoguardrails.library.hf_classifier.backends._get_or_create_pipeline") as mock_pipeline:
+            _prewarm_local_hf_classifiers(app)
+            mock_pipeline.assert_called_once()
+
+    def test_load_failure_stores_sentinel(self, tmp_path):
+        from nemoguardrails.library.hf_classifier.backends import (
+            _pipeline_cache_key,
+            _PipelineLoadError,
+        )
+        from nemoguardrails.server.api import _prewarm_local_hf_classifiers
+
+        app = self._make_app(tmp_path, {"local_cfg": self._LOCAL_YML})
+        with mock.patch(
+            "nemoguardrails.library.hf_classifier.backends._get_or_create_pipeline",
+            side_effect=OSError("model not found"),
+        ):
+            _prewarm_local_hf_classifiers(app)
+
+        key = _pipeline_cache_key(
+            "test-ner-model",
+            "token-classification",
+            {"aggregation_strategy": "simple"},
+        )
+        sentinel = backends_mod._pipelines.get(key)
+        assert isinstance(sentinel, _PipelineLoadError)
+        assert "model not found" in sentinel.error
+
+    def test_sentinel_prevents_lazy_retry(self, tmp_path):
+        from nemoguardrails.library.hf_classifier.backends import (
+            _get_or_create_pipeline,
+            _pipeline_cache_key,
+            _PipelineLoadError,
+        )
+
+        key = _pipeline_cache_key("broken-model", "text-classification", {})
+        backends_mod._pipelines[key] = _PipelineLoadError("download timed out")
+        with pytest.raises(RuntimeError, match="failed to load at startup"):
+            _get_or_create_pipeline("broken-model", "text-classification", {})

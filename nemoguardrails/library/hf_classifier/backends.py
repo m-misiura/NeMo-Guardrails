@@ -141,24 +141,45 @@ _HTTP_ONLY_PARAMS = frozenset(
 )
 
 
+class _PipelineLoadError:
+    """Sentinel stored in _pipelines when a pipeline fails to load at startup.
+    Prevents silent retry — classify() raises immediately with the original error."""
+
+    def __init__(self, error: str) -> None:
+        self.error = error
+
+
+def _pipeline_cache_key(model_name: str, task: str, parameters: Dict[str, Any]) -> str:
+    agg = parameters.get("aggregation_strategy")
+    return f"{task}:{model_name}:{agg}"
+
+
 def _get_or_create_pipeline(
     model_name: str,
     task: str,
     parameters: Dict[str, Any],
 ) -> Any:
-    agg = parameters.get("aggregation_strategy")
-    cache_key = f"{task}:{model_name}:{agg}"
-    if cache_key not in _pipelines:
-        try:
-            from transformers import pipeline
-        except ImportError:
-            raise ImportError(
-                "The 'transformers' package is required for the local HF classifier "
-                "backend. Install it with: pip install nemoguardrails[hf-classifier]"
-            )
-        kwargs = {k: v for k, v in parameters.items() if k not in _HTTP_ONLY_PARAMS}
-        _pipelines[cache_key] = pipeline(task=task, model=model_name, **kwargs)
-        log.info("Loaded HF pipeline: task=%s model=%s", task, model_name)
+    cache_key = _pipeline_cache_key(model_name, task, parameters)
+    cached = _pipelines.get(cache_key)
+    if isinstance(cached, _PipelineLoadError):
+        raise RuntimeError(
+            f"HF pipeline '{model_name}' failed to load at startup: {cached.error}. "
+            "Check server logs for details. To use a local model, set "
+            "model_name to a filesystem path. For air-gapped environments, "
+            "set HF_HUB_OFFLINE=1 and ensure the model is cached."
+        )
+    if cached is not None:
+        return cached
+    try:
+        from transformers import pipeline
+    except ImportError:
+        raise ImportError(
+            "The 'transformers' package is required for the local HF classifier "
+            "backend. Install it with: pip install nemoguardrails[hf-classifier]"
+        )
+    kwargs = {k: v for k, v in parameters.items() if k not in _HTTP_ONLY_PARAMS}
+    _pipelines[cache_key] = pipeline(task=task, model=model_name, **kwargs)
+    log.info("Loaded HF pipeline: task=%s model=%s", task, model_name)
     return _pipelines[cache_key]
 
 
@@ -330,12 +351,14 @@ class FMSBackend(ClassifierBackend):
                     raise ValueError(f"FMS detectors returned {resp.status}: {body[:500]}")
                 data = await resp.json()
 
+        log.debug("FMS raw response: %s", str(data)[:1000])
+
         try:
             (detections,) = data
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as exc:
             raise ValueError(
                 f"Unexpected FMS response structure (expected [[...]] for single content). Raw: {str(data)[:500]}"
-            )
+            ) from exc
 
         if not isinstance(detections, list):
             raise ValueError(f"Unexpected FMS response structure (inner element is not a list). Raw: {str(data)[:500]}")

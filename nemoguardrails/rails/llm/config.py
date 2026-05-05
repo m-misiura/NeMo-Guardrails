@@ -379,6 +379,7 @@ class _HFClassifierBase(BaseModel):
     """Shared fields for all HuggingFace classifier backends."""
 
     model_name: str = Field(
+        min_length=1,
         description="HF model ID, local path, or server-side model identifier.",
     )
     threshold: float = Field(

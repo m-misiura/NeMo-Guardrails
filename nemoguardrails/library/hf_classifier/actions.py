@@ -49,7 +49,7 @@ async def _classify_and_check(
     backend = get_backend(classifier_config)
     results = await backend.classify(text)
 
-    if text and not results:
+    if text and not results and getattr(classifier_config, "task", None) == "text-classification":
         log.warning(
             "HF classifier '%s' returned no results for non-empty input — "
             "possible API compatibility issue with the '%s' backend.",
@@ -84,7 +84,7 @@ async def hf_classifier_check_input(
     **kwargs,
 ) -> bool:
     """Check user input against a HuggingFace classifier."""
-    text = context.get("user_message", "") if context else ""
+    text = (context.get("user_message") or "") if context else ""
     return await _classify_and_check(classifier, text, config)
 
 
@@ -96,7 +96,7 @@ async def hf_classifier_check_output(
     **kwargs,
 ) -> bool:
     """Check bot output against a HuggingFace classifier."""
-    text = context.get("bot_message", "") if context else ""
+    text = (context.get("bot_message") or "") if context else ""
     return await _classify_and_check(classifier, text, config)
 
 
@@ -108,7 +108,7 @@ async def hf_classifier_check_retrieval(
     **kwargs,
 ) -> bool:
     """Check retrieved chunks against a HuggingFace classifier."""
-    text = context.get("relevant_chunks", "") if context else ""
+    text = (context.get("relevant_chunks") or "") if context else ""
     return await _classify_and_check(classifier, text, config)
 
 
@@ -120,7 +120,7 @@ async def hf_classifier_check_tool_input(
     **kwargs,
 ) -> bool:
     """Check tool input against a HuggingFace classifier."""
-    text = context.get("tool_message", "") if context else ""
+    text = (context.get("tool_message") or "") if context else ""
     return await _classify_and_check(classifier, text, config)
 
 
@@ -133,6 +133,8 @@ async def hf_classifier_check_tool_output(
     **kwargs,
 ) -> bool:
     """Check tool output against a HuggingFace classifier."""
-    calls = tool_calls or (context.get("tool_calls", []) if context else [])
+    if not tool_calls and context:
+        tool_calls = context.get("tool_calls") or []
+    calls = tool_calls or []
     text = json.dumps(calls) if calls else ""
     return await _classify_and_check(classifier, text, config)
