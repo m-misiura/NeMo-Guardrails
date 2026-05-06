@@ -146,6 +146,7 @@ def _prewarm_local_hf_classifiers(app: GuardrailsApp) -> None:
         return
 
     os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", str(_PREWARM_TIMEOUT))
+    log.info("HF_HUB_DOWNLOAD_TIMEOUT=%s", os.environ["HF_HUB_DOWNLOAD_TIMEOUT"])
 
     executor = ThreadPoolExecutor(max_workers=1)
     try:

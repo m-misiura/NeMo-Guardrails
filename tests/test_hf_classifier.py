@@ -21,6 +21,7 @@ import logging
 from types import SimpleNamespace
 from unittest import mock
 
+import aiohttp
 import pytest
 from aioresponses import aioresponses
 from pydantic import ValidationError
@@ -77,10 +78,12 @@ def _clear_caches():
     backends_mod._pipelines.clear()
     backends_mod._ssl_cache.clear()
     backends_mod._warned_env_vars.clear()
+    backends_mod._backend_instances.clear()
     yield
     backends_mod._pipelines.clear()
     backends_mod._ssl_cache.clear()
     backends_mod._warned_env_vars.clear()
+    backends_mod._backend_instances.clear()
 
 
 class TestConfig:
@@ -174,7 +177,7 @@ class TestLocalBackend:
     @pytest.mark.asyncio
     async def test_text_classification(self):
         c = _local()
-        backends_mod._pipelines["text-classification:test-model:None"] = mock.MagicMock(
+        backends_mod._pipelines["text-classification:test-model:[]"] = mock.MagicMock(
             return_value=[{"label": "toxic", "score": 0.9}]
         )
         r = await LocalBackend(c).classify("text")
@@ -187,8 +190,8 @@ class TestLocalBackend:
             blocked_labels=["PER"],
             parameters={"aggregation_strategy": "simple"},
         )
-        backends_mod._pipelines["token-classification:test-model:simple"] = mock.MagicMock(
-            return_value=[{"entity_group": "PER", "score": 0.85}]
+        backends_mod._pipelines["token-classification:test-model:[('aggregation_strategy', 'simple')]"] = (
+            mock.MagicMock(return_value=[{"entity_group": "PER", "score": 0.85}])
         )
         r = await LocalBackend(c).classify("John")
         assert r[0]["label"] == "PER"
@@ -200,8 +203,8 @@ class TestLocalBackend:
             blocked_labels=["LOC"],
             parameters={"aggregation_strategy": "simple"},
         )
-        backends_mod._pipelines["token-classification:test-model:simple"] = mock.MagicMock(
-            return_value=[{"entity": "LOC", "score": 0.7}]
+        backends_mod._pipelines["token-classification:test-model:[('aggregation_strategy', 'simple')]"] = (
+            mock.MagicMock(return_value=[{"entity": "LOC", "score": 0.7}])
         )
         r = await LocalBackend(c).classify("Paris")
         assert r[0]["label"] == "LOC"
@@ -732,3 +735,124 @@ models: []
         backends_mod._pipelines[key] = _PipelineLoadError("download timed out")
         with pytest.raises(RuntimeError, match="failed to load at startup"):
             _get_or_create_pipeline("broken-model", "text-classification", {})
+
+    def test_prewarm_timeout_stores_sentinel(self, tmp_path):
+        from nemoguardrails.library.hf_classifier.backends import (
+            _pipeline_cache_key,
+            _PipelineLoadError,
+        )
+        from nemoguardrails.server.api import _prewarm_local_hf_classifiers
+
+        app = self._make_app(tmp_path, {"local_cfg": self._LOCAL_YML})
+        with (
+            mock.patch(
+                "nemoguardrails.server.api._PREWARM_TIMEOUT",
+                0.001,
+            ),
+            mock.patch(
+                "nemoguardrails.library.hf_classifier.backends._get_or_create_pipeline",
+                side_effect=TimeoutError("timed out"),
+            ),
+        ):
+            _prewarm_local_hf_classifiers(app)
+
+        key = _pipeline_cache_key(
+            "test-ner-model",
+            "token-classification",
+            {"aggregation_strategy": "simple"},
+        )
+        sentinel = backends_mod._pipelines.get(key)
+        assert isinstance(sentinel, _PipelineLoadError)
+        assert "timed out" in sentinel.error.lower()
+
+
+class TestFMSThresholdForwarding:
+    _URL = "http://fms:9000/api/v1/text/contents"
+
+    @pytest.mark.asyncio
+    async def test_threshold_sent_in_payload(self):
+        from yarl import URL
+
+        cfg = _remote(backend="fms", endpoint="http://fms:9000", threshold=0.75)
+        backend = FMSBackend(cfg)
+        with aioresponses() as m:
+            m.post(self._URL, payload=[[]])
+            await backend.classify("hello")
+            call_kwargs = m.requests[("POST", URL(self._URL))][0].kwargs
+            body = call_kwargs["json"]
+            assert body["detector_params"]["threshold"] == 0.75
+
+
+class TestSentinelThroughLocalBackend:
+    @pytest.mark.asyncio
+    async def test_classify_raises_on_sentinel(self):
+        from nemoguardrails.library.hf_classifier.backends import (
+            _pipeline_cache_key,
+            _PipelineLoadError,
+        )
+
+        cfg = _local()
+        key = _pipeline_cache_key("test-model", "text-classification", {})
+        backends_mod._pipelines[key] = _PipelineLoadError("download failed")
+        with pytest.raises(RuntimeError, match="failed to load at startup"):
+            await LocalBackend(cfg).classify("text")
+
+
+class TestConnectionError:
+    @pytest.mark.asyncio
+    async def test_vllm_connection_error(self):
+        url = "http://vllm:8000/classify"
+        backend = VLLMBackend(_remote(backend="vllm", endpoint="http://vllm:8000"))
+        with aioresponses() as m:
+            m.post(
+                url,
+                exception=aiohttp.ClientConnectorError(
+                    connection_key=mock.MagicMock(),
+                    os_error=OSError("Connection refused"),
+                ),
+            )
+            with pytest.raises(aiohttp.ClientConnectorError):
+                await backend.classify("text")
+
+    @pytest.mark.asyncio
+    async def test_fms_connection_error(self):
+        url = "http://fms:9000/api/v1/text/contents"
+        backend = FMSBackend(_remote(backend="fms", endpoint="http://fms:9000"))
+        with aioresponses() as m:
+            m.post(
+                url,
+                exception=aiohttp.ClientConnectorError(
+                    connection_key=mock.MagicMock(),
+                    os_error=OSError("Connection refused"),
+                ),
+            )
+            with pytest.raises(aiohttp.ClientConnectorError):
+                await backend.classify("text")
+
+
+class TestRemoteEmptyResultsNoWarning:
+    @pytest.mark.asyncio
+    async def test_fms_empty_results_no_warning(self, caplog):
+        cfg = _remote(backend="fms", endpoint="http://fms:9000", threshold=0.5, blocked_labels=["toxic"])
+        with mock.patch(
+            "nemoguardrails.library.hf_classifier.actions.get_backend",
+            return_value=mock.AsyncMock(classify=mock.AsyncMock(return_value=[])),
+        ):
+            with caplog.at_level(logging.WARNING):
+                result = await _classify_and_check("t", "text", _rails_cfg("t", cfg))
+        assert result is True
+        assert "returned no results" not in caplog.text
+
+
+class TestBackendCaching:
+    def test_get_backend_returns_same_instance(self):
+        cfg = _remote(backend="vllm")
+        first = get_backend(cfg, name="my_classifier")
+        second = get_backend(cfg, name="my_classifier")
+        assert first is second
+
+    def test_different_names_return_different_instances(self):
+        cfg = _remote(backend="vllm")
+        a = get_backend(cfg, name="classifier_a")
+        b = get_backend(cfg, name="classifier_b")
+        assert a is not b

@@ -46,7 +46,7 @@ async def _classify_and_check(
     if classifier_config is None:
         raise ValueError(f"Unknown classifier '{classifier_name}'. Available: {list(classifiers)}")
 
-    backend = get_backend(classifier_config)
+    backend = get_backend(classifier_config, name=classifier_name)
     results = await backend.classify(text)
 
     if text and not results and getattr(classifier_config, "task", None) == "text-classification":

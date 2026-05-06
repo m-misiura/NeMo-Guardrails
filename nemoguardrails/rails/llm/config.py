@@ -435,6 +435,7 @@ class RemoteHFClassifierConfig(_HFClassifierBase):
     )
     api_key_env_var: Optional[str] = Field(
         default=None,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
         description="Environment variable name holding the API key. "
         "Resolved at runtime to an Authorization: Bearer header.",
     )
@@ -442,7 +443,9 @@ class RemoteHFClassifierConfig(_HFClassifierBase):
         default_factory=dict,
         description="Remote backend parameters: 'default_headers' (Dict[str, str]), "
         "'timeout' (float, seconds), 'verify_ssl' (bool), "
-        "'ca_cert'/'client_cert'/'client_key' (str, paths).",
+        "'ca_cert'/'client_cert'/'client_key' (str, paths). "
+        "Note: 'ca_cert' replaces (not extends) system CAs; use a "
+        "concatenated bundle to include both custom and system CAs.",
     )
 
     @model_validator(mode="after")

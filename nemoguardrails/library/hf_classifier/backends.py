@@ -150,8 +150,8 @@ class _PipelineLoadError:
 
 
 def _pipeline_cache_key(model_name: str, task: str, parameters: Dict[str, Any]) -> str:
-    agg = parameters.get("aggregation_strategy")
-    return f"{task}:{model_name}:{agg}"
+    filtered = sorted((k, v) for k, v in parameters.items() if k not in _HTTP_ONLY_PARAMS)
+    return f"{task}:{model_name}:{filtered}"
 
 
 def _get_or_create_pipeline(
@@ -229,16 +229,22 @@ class VLLMBackend(ClassifierBackend):
         self._headers = _build_headers(config)
         self._timeout = _get_timeout(config)
         self._ssl = _build_ssl_context(config)
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(timeout=self._timeout)
+        return self._session
 
     async def classify(self, text: str) -> List[ClassificationResult]:
         payload = {"model": self._model_name, "input": text}
 
-        async with aiohttp.ClientSession(timeout=self._timeout) as session:
-            async with session.post(self._url, json=payload, headers=self._headers, ssl=self._ssl) as resp:
-                if resp.status != 200:
-                    body = await resp.text()
-                    raise ValueError(f"vLLM /classify returned {resp.status}: {body[:500]}")
-                data = await resp.json()
+        session = self._get_session()
+        async with session.post(self._url, json=payload, headers=self._headers, ssl=self._ssl) as resp:
+            if resp.status != 200:
+                body = await resp.text()
+                raise ValueError(f"vLLM /classify returned {resp.status}: {body[:500]}")
+            data = await resp.json()
 
         try:
             items = data["data"]
@@ -281,16 +287,22 @@ class KServeBackend(ClassifierBackend):
         self._headers = _build_headers(config)
         self._timeout = _get_timeout(config)
         self._ssl = _build_ssl_context(config)
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(timeout=self._timeout)
+        return self._session
 
     async def classify(self, text: str) -> List[ClassificationResult]:
         payload: Dict[str, Any] = {"instances": [text]}
 
-        async with aiohttp.ClientSession(timeout=self._timeout) as session:
-            async with session.post(self._url, json=payload, headers=self._headers, ssl=self._ssl) as resp:
-                if resp.status != 200:
-                    body = await resp.text()
-                    raise ValueError(f"KServe predict returned {resp.status}: {body[:500]}")
-                data = await resp.json()
+        session = self._get_session()
+        async with session.post(self._url, json=payload, headers=self._headers, ssl=self._ssl) as resp:
+            if resp.status != 200:
+                body = await resp.text()
+                raise ValueError(f"KServe predict returned {resp.status}: {body[:500]}")
+            data = await resp.json()
 
         try:
             predictions = data["predictions"]
@@ -337,6 +349,12 @@ class FMSBackend(ClassifierBackend):
         self._headers = _build_headers(config)
         self._timeout = _get_timeout(config)
         self._ssl = _build_ssl_context(config)
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(timeout=self._timeout)
+        return self._session
 
     async def classify(self, text: str) -> List[ClassificationResult]:
         payload: Dict[str, Any] = {
@@ -344,14 +362,12 @@ class FMSBackend(ClassifierBackend):
             "detector_params": {"threshold": self._threshold},
         }
 
-        async with aiohttp.ClientSession(timeout=self._timeout) as session:
-            async with session.post(self._url, json=payload, headers=self._headers, ssl=self._ssl) as resp:
-                if resp.status != 200:
-                    body = await resp.text()
-                    raise ValueError(f"FMS detectors returned {resp.status}: {body[:500]}")
-                data = await resp.json()
-
-        log.debug("FMS raw response: %s", str(data)[:1000])
+        session = self._get_session()
+        async with session.post(self._url, json=payload, headers=self._headers, ssl=self._ssl) as resp:
+            if resp.status != 200:
+                body = await resp.text()
+                raise ValueError(f"FMS detectors returned {resp.status}: {body[:500]}")
+            data = await resp.json()
 
         try:
             (detections,) = data
@@ -378,10 +394,17 @@ _BACKENDS = {
     "fms": FMSBackend,
 }
 
+_backend_instances: Dict[str, ClassifierBackend] = {}
 
-def get_backend(config: HFClassifierConfig) -> ClassifierBackend:
-    """Create a backend instance from classifier config."""
+
+def get_backend(config: HFClassifierConfig, name: str = "") -> ClassifierBackend:
+    """Get or create a cached backend instance from classifier config."""
+    cache_key = name or f"{config.backend}:{config.model_name}"
+    cached = _backend_instances.get(cache_key)
+    if cached is not None:
+        return cached
     cls = _BACKENDS.get(config.backend)
     if cls is None:
         raise ValueError(f"Unknown hf_classifier backend: '{config.backend}'. Supported: {', '.join(_BACKENDS)}")
-    return cls(config)
+    _backend_instances[cache_key] = cls(config)
+    return _backend_instances[cache_key]
