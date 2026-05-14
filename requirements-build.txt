@@ -1,0 +1,2 @@
+--index-url https://console.redhat.com/api/pypi/public-rhai/rhoai/3.5-EA1/cpu-ubi9/simple/
+poetry-core==1.9.1

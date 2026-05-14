@@ -1,175 +1,17 @@
-###############################################################
-# Stage 1 Base builder image with common tooling
-###############################################################
-FROM registry.access.redhat.com/ubi9/python-312@sha256:ff373f4b42b662e99954adea770ca87b4ea963186cc752174ccb94aa08fa702d as packages-build
-
-USER root
-WORKDIR /app
-
-ENV PATH="$HOME/.cargo/bin:$PATH"
-ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig/
-ARG TARGETARCH
-
-# Install dependencies
-RUN if [ "$TARGETARCH" = "ppc64le" ]; then                        \
-        dnf install -y \
-        make libtool wget patch ninja-build cmake xz bzip2-devel libffi-devel zlib-devel openssl-devel libevent-devel \
-        python3.12 python3.12-devel python3.12-pip clang \
-        gcc-toolset-14-gcc gcc-toolset-14-gcc-c++ gcc-toolset-14-gcc-gfortran skopeo && \
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y      && \
-        dnf clean all                                                   && \
-        pip install --upgrade setuptools-rust pip 'cmake<4' setuptools wheel maturin  ; \
-    fi
-
-COPY requirements* /app/
-
-# Create a dummy file to trigger build dependency
-RUN touch /tmp/control
-
-###############################################################
-# Stage 2 to build OpenBLAS
-###############################################################
-
-FROM packages-build AS openblas-builder
-ENV OPENBLAS_VERSION=0.3.30
-ARG TARGETARCH
-
-WORKDIR /app
-
-# Creating a directory for OpenBlas
-RUN mkdir /tmp/openblas
-
-RUN if [ "$TARGETARCH" = "ppc64le" ]; then \
-        source /opt/rh/gcc-toolset-14/enable &&  \
-        wget https://github.com/OpenMathLib/OpenBLAS/releases/download/v${OPENBLAS_VERSION}/OpenBLAS-${OPENBLAS_VERSION}.zip && \
-        unzip OpenBLAS-${OPENBLAS_VERSION}.zip -d /tmp/ && mv -T /tmp/OpenBLAS-${OPENBLAS_VERSION} /tmp/openblas             && \
-        cd /tmp/openblas                                                                                                     && \
-        make -j$(nproc) TARGET=POWER9 BINARY=64 USE_OPENMP=1 USE_THREAD=1 NUM_THREADS=120 DYNAMIC_ARCH=1 INTERFACE64=0        ; \
-    fi
-
-###############################################################
-# Stage 3 to build pyTorch
-###############################################################
-
-FROM packages-build AS torch-builder
-USER root
-
-WORKDIR /app
-
-ARG MAX_JOBS
-ARG _GLIBCXX_USE_CXX11_ABI=1
-ARG TARGETARCH
-
-RUN mkdir -p /torchwheels
-
-RUN if [ "$TARGETARCH" = "ppc64le" ]; then \
-    export TORCH_VERSION=$(sed -n "s/^torch==//p" /app/requirements-torch.in)                                                      && \
-    source /opt/rh/gcc-toolset-14/enable &&  \
-    git clone --recursive https://github.com/pytorch/pytorch.git -b v${TORCH_VERSION} && \
-    cd pytorch && pip install -r requirements.txt && \
-    rm -f dist/torch*+git*whl                     && \
-    # Set MAX_JOBS to 2 or 4 to prevent OOM
-    # MAX_JOBS=4 \
-    USE_NCCL=0 \
-    BUILD_TEST=0 \
-    PYTORCH_BUILD_VERSION=${TORCH_VERSION} \
-    PYTORCH_BUILD_NUMBER=1 \
-    pip wheel . --no-build-isolation --wheel-dir /torchwheels/ \
-; fi
-
-###############################################################
-# Stage 4 to build Tiktoken
-###############################################################
-
-FROM packages-build as tiktoken-builder
-ARG TARGETARCH
-WORKDIR /app
-
-RUN mkdir -p /tiktokenwheels
-
-RUN if [ "$TARGETARCH" = "ppc64le" ]; then \
-        export TIKTOKEN_VERSION=$(sed -n "s/^tiktoken==//p" /app/requirements.txt) && \
-        source /opt/rh/gcc-toolset-14/enable && \
-        git clone https://github.com/openai/tiktoken.git && \
-        cd tiktoken && \
-        git checkout ${TIKTOKEN_VERSION} && \
-        pip wheel . --wheel-dir /tiktokenwheels ; \
-    fi
-
-###############################################################
-# Stage 5 to build onnxruntime
-###############################################################
-FROM packages-build AS onnxruntime-builder
-ARG TARGETARCH
-USER root
-
-WORKDIR /app
-
-ENV LD_LIBRARY_PATH=/usr/local/lib64:/usr/local/lib:/usr/lib64:/usr/lib:/app/.openblas/lib
-
-# copy built OpenBLAS sources
-COPY --from=openblas-builder /tmp/openblas/ /build/openblas
-
-# Install OpenBLAS
-RUN if [ "$TARGETARCH" = "ppc64le" ]; then \
-        PREFIX=/app/.openblas make -C /build/openblas install   && \
-        ln -sf /app/.openblas/lib/libopenblasp-r0.3.30.so /app/.openblas/lib/libopenblasp.so.0 ; \
-   fi
-
-COPY scripts/build_onnxruntime.sh /build/build_onnxruntime.sh
-
-RUN mkdir -p /onnxruntime_wheels
-
-# Build onnxruntime
-RUN if [ "$TARGETARCH" = "ppc64le" ]; then \
-        export ONNXRUNTIME_VERSION=$(sed -n "s/^onnxruntime==//p" /app/requirements.txt) && \
-        sh /build/build_onnxruntime.sh      ; \
-    fi
-
-###############################################################
-# Stage 6 Install hf_xet from source ppc64le
-###############################################################
-FROM packages-build AS hf-xet-builder
-ARG TARGETARCH
-USER root
-
-WORKDIR /app
-RUN mkdir -p /hf_xet_wheels
-
-RUN if [ "$TARGETARCH" = "ppc64le" ]; then \
-       export HF_XET_VERSION=$(sed -n "s/^hf-xet==//p" /app/requirements.txt) && \
-       git clone https://github.com/huggingface/xet-core.git && \
-       cd xet-core/hf_xet && git checkout v${HF_XET_VERSION} && \
-       sed -i '/python-source = "python"/d' pyproject.toml && \
-       maturin build --release --out /hf_xet_wheels ; \
-    fi
-
-###############################################################
-# Stage 7 Install all the dependencies
-###############################################################
-
-FROM registry.access.redhat.com/ubi9/python-312@sha256:ff373f4b42b662e99954adea770ca87b4ea963186cc752174ccb94aa08fa702d as build
+FROM quay.io/aipcc/base-images/cpu:3.5.0-ea.1-1778521486 as build
 
 USER 0
 WORKDIR /app
 
-ARG TARGETARCH
 ARG GUARDRAILS_PROFILE=opensource
-ENV LD_LIBRARY_PATH=/usr/local/lib64:/usr/local/lib:/usr/lib64:/usr/lib:/app/.openblas/lib
-ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig/:/app/.openblas/lib/pkgconfig
-ENV PATH="$HOME/.cargo/bin:/app/.venv/bin:$PATH"
-ENV BLIS_ARCH=generic
-ENV GRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1
 
-COPY requirements.txt requirements-torch.txt pyproject.toml README.md ./
+COPY requirements.txt pyproject.toml README.md ./
 COPY nemoguardrails/ ./nemoguardrails/
 COPY scripts/ ./scripts/
 COPY examples/bots/ ./examples/bots/
 
 RUN chmod +x ./scripts/entrypoint.sh
-
-RUN python3 -m pip install --no-cache-dir pyyaml
-
+RUN pip install --no-cache-dir pyyaml
 RUN python3 ./scripts/filter_guardrails.py ./scripts/provider-list.yaml $GUARDRAILS_PROFILE
 
 ENV HF_HOME=/app/.cache/huggingface \
@@ -178,46 +20,10 @@ ENV HF_HOME=/app/.cache/huggingface \
     NLTK_DATA=/app/.cache/nltk_data \
     FASTEMBED_CACHE_PATH=/app/.cache/fastembed
 
-RUN python3 -m venv /app/.venv
-
-# Copy OpenBLAS
-COPY --from=openblas-builder /tmp/openblas/ /tmp/openblas
-
-# Dummy file to trigger build dependency
-COPY --from=torch-builder /tmp/control /dev/null
-COPY --from=tiktoken-builder /tmp/control /dev/null
-COPY --from=onnxruntime-builder /tmp/control /dev/null
-COPY --from=hf-xet-builder /tmp/control /dev/null
-
-RUN --mount=type=cache,from=torch-builder,source=/torchwheels/,target=/tmp/torchwheels/,ro \
-    --mount=type=cache,from=tiktoken-builder,source=/tiktokenwheels/,target=/tmp/tiktokenwheels/,ro \
-    --mount=type=cache,from=onnxruntime-builder,source=/onnxruntime_wheels/,target=/tmp/onnxruntime_wheels/,ro \
-    --mount=type=cache,from=hf-xet-builder,source=/hf_xet_wheels/,target=/tmp/hf_xet_wheels/,ro \
-    if [ "$TARGETARCH" = "ppc64le" ]; then \
-        /app/.venv/bin/pip install \
-            /tmp/torchwheels/*.whl \
-            /tmp/tiktokenwheels/*.whl \
-            /tmp/onnxruntime_wheels/*.whl  \
-            /tmp/hf_xet_wheels/*.whl && \
-        PREFIX=/app/.openblas make -C /tmp/openblas install && rm -rf /tmp/openblas     ; \
-    fi
-
-# Temporary workaround for ppc64le with the pinned pandas version. Remove after upgrading pandas with v3.x
-RUN if [ "$TARGETARCH" == "ppc64le" ]; then     \
-        export PANDAS_VERSION=$(sed -n "s/^pandas==//p" /app/requirements.txt) && \
-        /app/.venv/bin/pip install --no-cache-dir "meson<1.10" meson-python ninja cython numpy versioneer[toml] packaging && \
-        /app/.venv/bin/pip install --no-cache-dir --no-build-isolation pandas==${PANDAS_VERSION} ; \
-    fi
-
-RUN /app/.venv/bin/pip install --no-cache-dir -r requirements.txt && \
+RUN python3 -m venv /app/.venv && \
+    /app/.venv/bin/pip install --no-cache-dir -r requirements.txt && \
     /app/.venv/bin/pip install --no-cache-dir --no-deps . && \
     rm -rf /root/.cache/pip /tmp/* /var/tmp/*
-
-RUN /app/.venv/bin/pip install --no-cache-dir /cachi2/output/deps/generic/en_core_web_lg-3.8.0-py3-none-any.whl
-
-RUN if [ "$TARGETARCH" != "ppc64le" ]; then     \
-        /app/.venv/bin/pip install --no-cache-dir -r requirements-torch.txt ; \
-    fi
 
 RUN set -ex && \
     GUARDRAILS_PROFILE=$GUARDRAILS_PROFILE /app/.venv/bin/python ./scripts/pre_download_required_models.py && \
@@ -226,16 +32,10 @@ RUN set -ex && \
     find /app/.cache -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true && \
     rm -rf /app/.cache/huggingface/xet /root/.cache /tmp/* /var/tmp/*
 
-###############################################################
-# Stage 8 Final Build
-###############################################################
-
-FROM registry.access.redhat.com/ubi9/python-312:latest as runtime
+FROM quay.io/aipcc/base-images/cpu:3.5.0-ea.1-1778521486 as runtime
 
 USER 0
 WORKDIR /app
-
-ENV LD_LIBRARY_PATH=/usr/local/lib64:/usr/local/lib:/usr/lib64:/usr/lib:/app/.openblas/lib
 
 COPY --from=build /app /app
 
