@@ -37,6 +37,7 @@ from nemoguardrails.telemetry import (
     report_usage,
     set_deployment_type,
 )
+from scripts import kibana_verify_export, telemetry_smoke
 
 
 @pytest.fixture(autouse=True)
@@ -949,6 +950,39 @@ class TestBuiltinFeatures:
         assert "jailbreak_detection" in result
         assert "sensitive_data_detection" in result
 
+    def test_config_feature_ids_are_normalized(self):
+        from nemoguardrails.rails.llm.config import (
+            FactCheckingRailConfig,
+            PatronusEvaluateApiParams,
+            PatronusEvaluateConfig,
+            PatronusRailConfig,
+            Rails,
+            RailsConfigData,
+            RegexDetection,
+            RegexDetectionOptions,
+        )
+
+        config_data = RailsConfigData(
+            fact_checking=FactCheckingRailConfig(parameters={"endpoint": "http://example.com"}),
+            patronus=PatronusRailConfig(
+                output=PatronusEvaluateConfig(
+                    evaluate_config=PatronusEvaluateApiParams(params={"criteria": "patronus:hallucination"})
+                )
+            ),
+            regex_detection=RegexDetection(input=RegexDetectionOptions(patterns=["secret"])),
+        )
+        config = MagicMock()
+        config.rails = Rails(config=config_data)
+
+        result = _detect_builtin_features(config)
+
+        assert "factchecking" in result
+        assert "patronusai" in result
+        assert "regex" in result
+        assert "fact_checking" not in result
+        assert "patronus" not in result
+        assert "regex_detection" not in result
+
     def test_detects_features_from_exact_flow_names(self):
         from nemoguardrails.rails.llm.config import Rails
 
@@ -1012,6 +1046,62 @@ class TestBuiltinFeatures:
         data = _collect_usage_data(config, "library")
         assert data.num_custom_flows == 2
 
+    def test_v2_library_flows_not_counted_as_custom(self, tmp_path):
+        from nemoguardrails.colang.v2_x.lang.colang_ast import Flow
+
+        config = MagicMock()
+        config.colang_version = "2.x"
+        config.models = []
+        config.rails = None
+        config.tracing = None
+        config.docs = None
+        config.flows = [
+            Flow(
+                name="_user_said",
+                file_info={"name": str(telemetry._COLANG_V2_LIBRARY_DIR / "core.co")},
+            ),
+            Flow(
+                name="main",
+                file_info={"name": str(tmp_path / "main.co")},
+            ),
+        ]
+
+        data = _collect_usage_data(config, "library")
+
+        assert data.num_custom_flows == 1
+
+    def test_real_v2_tutorial_counts_only_user_flows(self):
+        from nemoguardrails.rails.llm.config import RailsConfig
+
+        config_path = Path(__file__).parents[2] / "examples" / "v2_x" / "tutorial" / "hello_world_1"
+        config = RailsConfig.from_path(str(config_path))
+
+        data = _collect_usage_data(config, "library")
+
+        assert len(config.flows) == 46
+        assert data.num_custom_flows == 1
+
+    def test_v2_smoke_fixture_counts_only_user_flows(self):
+        from nemoguardrails.rails.llm.config import RailsConfig
+
+        config_path = Path(__file__).parent / "smoke_fixtures" / "v2_custom_flow"
+        config = RailsConfig.from_path(str(config_path))
+
+        data = _collect_usage_data(config, "library")
+
+        assert len(config.flows) == 46
+        assert data.num_custom_flows == 1
+
+    def test_feature_alias_smoke_fixture_collects_documented_ids(self):
+        from nemoguardrails.rails.llm.config import RailsConfig
+
+        config_path = Path(__file__).parent / "smoke_fixtures" / "feature_aliases"
+        config = RailsConfig.from_path(str(config_path))
+
+        data = _collect_usage_data(config, "library")
+
+        assert data.builtin_features == ["factchecking", "patronusai", "regex"]
+
     def test_included_in_usage_data(self):
         from nemoguardrails.rails.llm.config import JailbreakDetectionConfig, Rails, RailsConfigData
 
@@ -1070,3 +1160,328 @@ class TestUpstreamSchemaConformance:
         event = _collect_usage_data(mock_config, "library")
         event.rails_engine = RailsEngineEnum.LLMRAILS
         validator.validate(event.model_dump(by_alias=True))
+
+
+class TestTelemetrySmokeDriver:
+    @staticmethod
+    def _scenarios_by_name():
+        scenarios = telemetry_smoke._build_scenarios(
+            library_config="cfg1",
+            rich_config="rich",
+            feature_alias_config="feature_aliases",
+            v2_config="v2_custom_flow",
+            iorails_config="iorails",
+            server_config_root="root",
+        )
+        return {scenario["name"]: scenario for scenario in scenarios}
+
+    @staticmethod
+    def _startup_event(**overrides):
+        event = {
+            "nemoSource": "guardrails",
+            "event": "startup",
+            "sessionId": "2b8e9879-80be-42bb-ad3f-81db8ec28e15",
+            "nemoguardrailsVersion": "0.21.0",
+            "pythonVersion": "3.13.7",
+            "platform": "test-platform",
+            "osName": "Darwin",
+            "timestamp": 1700000000.0,
+            "deploymentType": "library",
+            "railsEngine": "LLMRails",
+            "llmProviders": ["openai"],
+            "colangVersion": "1.0",
+            "numRailsConfigured": 0,
+            "railTypesInUse": [],
+            "builtinFeatures": [],
+            "tracingEnabled": False,
+            "hasKnowledgeBase": False,
+            "streamingConfigured": False,
+            "numCustomFlows": 0,
+        }
+        event.update(overrides)
+        return event
+
+    def test_smoke_scenarios_cover_feature_aliases_and_v2_custom_flows(self):
+        scenarios = self._scenarios_by_name()
+
+        assert "library_feature_aliases" in scenarios
+        assert "library_v2_custom_flows" in scenarios
+        assert "library_abc_v2" not in scenarios
+
+    def test_positive_scenarios_wait_for_daemon_sends(self):
+        scenarios = self._scenarios_by_name()
+
+        assert telemetry_smoke.DEFAULT_NETWORK_SETTLE_S == 20.0
+        assert "settle_after_audit_s" not in scenarios["library_llmrails"]
+        assert "settle_after_audit_s" not in scenarios["server_single_config"]
+
+    def test_kibana_filter_uses_exact_session_ids(self):
+        assert telemetry_smoke._format_kibana_filter(["id1", "id2"]) == 'client.sessionId : ("id1" or "id2")'
+
+    def test_common_assertions_require_non_empty_session_id_only(self):
+        scenario = self._scenarios_by_name()["library_feature_aliases"]
+        event = self._startup_event(sessionId="", builtinFeatures=["factchecking", "patronusai", "regex"])
+
+        error = telemetry_smoke._validate_startup_events(
+            scenario["name"],
+            [event],
+            assertion_sets=scenario["startup_assertions"],
+        )
+
+        assert error is not None
+        assert "sessionId" in error
+
+    def test_feature_alias_smoke_assertions_require_documented_ids(self):
+        scenario = self._scenarios_by_name()["library_feature_aliases"]
+        event = self._startup_event(builtinFeatures=["factchecking", "patronusai", "regex"])
+
+        assert (
+            telemetry_smoke._validate_startup_events(
+                scenario["name"],
+                [event],
+                assertion_sets=scenario["startup_assertions"],
+            )
+            is None
+        )
+
+        bad_event = dict(event)
+        bad_event["builtinFeatures"] = ["fact_checking", "patronus", "regex_detection"]
+        error = telemetry_smoke._validate_startup_events(
+            scenario["name"],
+            [bad_event],
+            assertion_sets=scenario["startup_assertions"],
+        )
+
+        assert error is not None
+        assert "builtinFeatures" in error
+
+    def test_v2_smoke_assertions_reject_bundled_library_flow_count(self):
+        scenario = self._scenarios_by_name()["library_v2_custom_flows"]
+        event = self._startup_event(colangVersion="2.x", numCustomFlows=1)
+
+        assert (
+            telemetry_smoke._validate_startup_events(
+                scenario["name"],
+                [event],
+                assertion_sets=scenario["startup_assertions"],
+            )
+            is None
+        )
+
+        bad_event = dict(event)
+        bad_event["numCustomFlows"] = 46
+        error = telemetry_smoke._validate_startup_events(
+            scenario["name"],
+            [bad_event],
+            assertion_sets=scenario["startup_assertions"],
+        )
+
+        assert error is not None
+        assert "numCustomFlows" in error
+
+    @pytest.mark.parametrize(
+        ("runner_name", "scenario"),
+        [
+            (
+                "_run_subprocess",
+                {
+                    "script": "pass",
+                    "expected_count": 1,
+                },
+            ),
+            (
+                "_run_server",
+                {
+                    "server_config_root": "root",
+                    "config_ids_to_hit": ["cfg1"],
+                    "expected_count": 1,
+                },
+            ),
+            (
+                "_run_server_multi_worker",
+                {
+                    "server_config_root": "root",
+                    "config_ids_to_hit": ["cfg1"],
+                    "expected_count": 3,
+                    "worker_count": 3,
+                },
+            ),
+            (
+                "_run_cli",
+                {
+                    "config_path": "cfg1",
+                    "expected_count": 1,
+                },
+            ),
+        ],
+    )
+    def test_process_runner_spawn_failures_return_structured_results(self, tmp_path, runner_name, scenario):
+        audit_file = tmp_path / "run" / "scenario" / "usage_stats.json"
+        runner = getattr(telemetry_smoke, runner_name)
+
+        with (
+            patch.object(telemetry_smoke, "_free_port", return_value=12345),
+            patch.object(telemetry_smoke.subprocess, "Popen", side_effect=FileNotFoundError("missing executable")),
+        ):
+            result = runner(scenario, {}, audit_file)
+
+        assert result["returncode"] == -1
+        assert result["duration_s"] >= 0
+        assert result["stderr_tail"] == ["FileNotFoundError('missing executable')"]
+        if runner_name in {"_run_server", "_run_server_multi_worker"}:
+            assert result["server_post_results"] == []
+        if runner_name == "_run_server_multi_worker":
+            assert result["worker_count"] == 3
+
+    def test_terminate_normalizes_windows_termination_code_only_after_terminating(self):
+        class NaturallyFailedProcess:
+            returncode = 1
+            terminated = False
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.terminated = True
+
+        class TerminatedProcess:
+            returncode = None
+            terminated = False
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.terminated = True
+
+            def wait(self, timeout):
+                self.returncode = 1
+                return self.returncode
+
+        naturally_failed = NaturallyFailedProcess()
+        assert telemetry_smoke._terminate(naturally_failed) == 1
+        assert naturally_failed.terminated is False
+
+        terminated = TerminatedProcess()
+        assert telemetry_smoke._terminate(terminated) == 0
+        assert terminated.terminated is True
+
+
+class TestKibanaVerifyExport:
+    def test_empty_manifest_raises_value_error(self):
+        with pytest.raises(ValueError, match="manifest has no results to verify"):
+            kibana_verify_export._verify({"results": []}, [])
+
+    def test_main_returns_2_for_empty_manifest(self, tmp_path, capsys):
+        manifest_path = tmp_path / "manifest.json"
+        export_path = tmp_path / "kibana.json"
+        manifest_path.write_text(json.dumps({"results": []}))
+        export_path.write_text(json.dumps([]))
+
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "kibana_verify_export.py",
+                "--manifest",
+                str(manifest_path),
+                "--export",
+                str(export_path),
+            ],
+        ):
+            assert kibana_verify_export.main() == 2
+
+        captured = capsys.readouterr()
+        assert "manifest has no results to verify" in captured.err
+
+    def test_verifier_matches_exact_client_session_ids(self):
+        manifest = {
+            "results": [
+                {
+                    "name": "library_llmrails",
+                    "startup_session_ids": ["2b8e9879-80be-42bb-ad3f-81db8ec28e15"],
+                    "expected_event_count": 1,
+                    "verdict": "PASS",
+                }
+            ]
+        }
+        docs = [
+            {
+                "fields": {
+                    "eventName": ["guardrails_usage_event"],
+                    "client.sessionId": ["2b8e9879-80be-42bb-ad3f-81db8ec28e15"],
+                }
+            }
+        ]
+
+        passed, failed = kibana_verify_export._verify(manifest, docs)
+
+        assert passed == 1
+        assert failed == 0
+
+    def test_verifier_rejects_prefix_only_session_match(self):
+        manifest = {
+            "results": [
+                {
+                    "name": "library_llmrails",
+                    "startup_session_ids": ["2b8e9879-80be-42bb-ad3f-81db8ec28e15"],
+                    "expected_event_count": 1,
+                    "verdict": "PASS",
+                }
+            ]
+        }
+        docs = [
+            {
+                "fields": {
+                    "eventName": ["guardrails_usage_event"],
+                    "client.sessionId": ["2b8e9879-80be-42bb-ad3f-81db8ec28e15-extra"],
+                }
+            }
+        ]
+
+        passed, failed = kibana_verify_export._verify(manifest, docs)
+
+        assert passed == 0
+        assert failed == 1
+
+    def test_verifier_ignores_parameters_session_id(self):
+        manifest = {
+            "results": [
+                {
+                    "name": "library_llmrails",
+                    "startup_session_ids": ["2b8e9879-80be-42bb-ad3f-81db8ec28e15"],
+                    "expected_event_count": 1,
+                    "verdict": "PASS",
+                }
+            ]
+        }
+        docs = [
+            {
+                "fields": {
+                    "eventName": ["guardrails_usage_event"],
+                    "parameters.sessionId": ["2b8e9879-80be-42bb-ad3f-81db8ec28e15"],
+                }
+            }
+        ]
+
+        passed, failed = kibana_verify_export._verify(manifest, docs)
+
+        assert passed == 0
+        assert failed == 1
+
+    def test_failed_smoke_scenarios_fail_verification(self):
+        manifest = {
+            "results": [
+                {
+                    "name": "library_llmrails",
+                    "startup_session_ids": ["2b8e9879-80be-42bb-ad3f-81db8ec28e15"],
+                    "expected_event_count": 1,
+                    "verdict": "FAIL",
+                }
+            ]
+        }
+
+        passed, failed = kibana_verify_export._verify(manifest, [])
+
+        assert passed == 0
+        assert failed == 1
