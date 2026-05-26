@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions import action
 from nemoguardrails.actions.actions import ActionResult
+from nemoguardrails.library.regex.actions import detect_regex_pattern
 from tests.utils import TestChat
 
 
@@ -646,3 +647,36 @@ def test_regex_detection_retrieval_allows_non_matching():
     # The retrieved chunk does NOT contain "classified" — passes through unchanged.
     chat >> "Hi!"
     chat << "Here is what I found."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_regex_action_accepts_extra_kwargs():
+    """Regression: detect_regex_pattern must accept the extra kwargs that
+    the action dispatcher injects during output streaming."""
+    config = RailsConfig.from_content(
+        yaml_content="""
+            models: []
+            rails:
+              config:
+                regex_detection:
+                  output:
+                    patterns:
+                      - "\\\\bconfidential\\\\b"
+        """,
+        colang_content="",
+    )
+
+    result = await detect_regex_pattern(
+        source="output",
+        text="This is confidential information.",
+        config=config,
+        context={"user_message": "hi"},
+        llm_task_manager=object(),
+        model_name="test-model",
+        llms={"main": object()},
+        llm=object(),
+    )
+
+    assert result["is_match"] is True
+    assert "\\bconfidential\\b" in result["detections"]

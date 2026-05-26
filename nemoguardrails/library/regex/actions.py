@@ -33,6 +33,7 @@ async def detect_regex_pattern(
     source: str,
     text: str,
     config: RailsConfig,
+    **kwargs,
 ) -> RegexDetectionResult:
     """Checks whether the provided text matches any forbidden regex pattern.
 
