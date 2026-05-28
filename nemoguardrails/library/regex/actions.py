@@ -28,7 +28,7 @@ class RegexDetectionResult(TypedDict):
     detections: List[str]
 
 
-def _regex_blocked_mapping(result: dict) -> bool:
+def _regex_blocked_mapping(result: RegexDetectionResult) -> bool:
     """Return True (blocked) when a regex match was found."""
     return result.get("is_match", False)
 
