@@ -702,5 +702,5 @@ def test_regex_output_mapping_is_registered():
     meta = getattr(detect_regex_pattern, "action_meta", {})
     assert meta.get("output_mapping") is not None, (
         "detect_regex_pattern is missing output_mapping — streaming output rails "
-        "will silently pass matched content through (see #1932 follow-up)"
+        "will silently pass matched content through (see #1936 follow-up)"
     )
