@@ -281,6 +281,10 @@ class LocalBackend(ClassifierBackend):
 
         raw = await loop.run_in_executor(None, _run)
 
+        # Transformers may wrap results in an extra list for single-text input
+        if raw and isinstance(raw[0], list):
+            raw = raw[0]
+
         results: List[ClassificationResult] = []
         for item in raw:
             if self._config.task == "text-classification":
@@ -304,18 +308,19 @@ class _RemoteBackend(ClassifierBackend):
     """
 
     def __init__(self, config: RemoteHFClassifierConfig) -> None:
-        self._headers = _build_headers(config)
+        self._config = config
         self._timeout = _get_timeout(config)
         self._ssl = _build_ssl_config(config)
 
     async def _post(self, url: str, json: Dict[str, Any]) -> httpx.Response:
         """POST with one automatic retry on transient failures."""
+        headers = _build_headers(self._config)
         for attempt in range(2):
             try:
                 async with httpx.AsyncClient(
                     timeout=self._timeout, verify=self._ssl.verify, cert=self._ssl.cert
                 ) as client:
-                    return await client.post(url, json=json, headers=self._headers)
+                    return await client.post(url, json=json, headers=headers)
             except _TRANSIENT_ERRORS:
                 if attempt > 0:
                     raise

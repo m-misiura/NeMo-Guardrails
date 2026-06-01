@@ -15,9 +15,8 @@
 
 """HuggingFace classifier-based detection actions."""
 
-import json
 import logging
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions import action
@@ -122,34 +121,3 @@ async def hf_classifier_check_retrieval(
     **kwargs,
 ) -> bool:
     return await _classify_and_check(classifier, _extract_text(context, "relevant_chunks"), config)
-
-
-@action()
-async def hf_classifier_check_tool_input(
-    classifier: str,
-    config: Optional[RailsConfig] = None,
-    context: Optional[dict] = None,
-    **kwargs,
-) -> bool:
-    text = _extract_text(context, "tool_message")
-    if not text:
-        log.warning(
-            "hf_classifier_check_tool_input: 'tool_message' not in context; skipping classification (allowing)."
-        )
-        return True
-    return await _classify_and_check(classifier, text, config)
-
-
-@action()
-async def hf_classifier_check_tool_output(
-    classifier: str,
-    tool_calls: Optional[Any] = None,
-    config: Optional[RailsConfig] = None,
-    context: Optional[dict] = None,
-    **kwargs,
-) -> bool:
-    if not tool_calls and context:
-        tool_calls = context.get("tool_calls") or []
-    calls = tool_calls or []
-    text = json.dumps(calls, default=str) if calls else ""
-    return await _classify_and_check(classifier, text, config)

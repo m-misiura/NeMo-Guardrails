@@ -23,23 +23,3 @@ flow hf classifier check retrieval $classifier
 
   if not $allowed
     $relevant_chunks = ""
-
-flow hf classifier check tool input $classifier
-  $allowed = await HfClassifierCheckToolInputAction(classifier=$classifier)
-
-  if not $allowed
-    if $system.config.enable_rails_exceptions
-      send InputRailException(message="Tool input blocked by 'hf classifier check tool input' (classifier='{$classifier}').")
-    else
-      bot refuse to respond
-    abort
-
-flow hf classifier check tool output $classifier
-  $allowed = await HfClassifierCheckToolOutputAction(classifier=$classifier)
-
-  if not $allowed
-    if $system.config.enable_rails_exceptions
-      send OutputRailException(message="Tool output blocked by 'hf classifier check tool output' (classifier='{$classifier}').")
-    else
-      bot refuse to respond
-    abort

@@ -36,8 +36,6 @@ from nemoguardrails.library.hf_classifier.actions import (
     hf_classifier_check_input,
     hf_classifier_check_output,
     hf_classifier_check_retrieval,
-    hf_classifier_check_tool_input,
-    hf_classifier_check_tool_output,
 )
 from nemoguardrails.library.hf_classifier.backends import (
     ClassificationResult,
@@ -233,6 +231,18 @@ class TestLocalBackend:
         backends_mod._pipelines[key] = mock.MagicMock(return_value=[{"entity": "LOC", "score": 0.7}])
         r = await LocalBackend(c).classify("Paris")
         assert r[0]["label"] == "LOC"
+
+    @pytest.mark.asyncio
+    async def test_nested_results_flattened(self):
+        c = _local()
+        key = backends_mod._pipeline_cache_key(c.model, c.task, c.parameters)
+        backends_mod._pipelines[key] = mock.MagicMock(
+            return_value=[[{"label": "toxic", "score": 0.9}, {"label": "safe", "score": 0.1}]]
+        )
+        r = await LocalBackend(c).classify("text")
+        assert len(r) == 2
+        assert r[0] == ClassificationResult(label="toxic", score=0.9)
+        assert r[1] == ClassificationResult(label="safe", score=0.1)
 
 
 class TestVLLMBackend:
@@ -470,7 +480,6 @@ class TestActionContextKeys:
             (hf_classifier_check_input, "user_message"),
             (hf_classifier_check_output, "bot_message"),
             (hf_classifier_check_retrieval, "relevant_chunks"),
-            (hf_classifier_check_tool_input, "tool_message"),
         ],
     )
     async def test_reads_correct_context_key(self, action_fn, context_key):
@@ -479,35 +488,6 @@ class TestActionContextKeys:
         with _patch_backend([ClassificationResult(label="toxic", score=0.9)]) as p:
             await action_fn(classifier="t", config=cfg, context={context_key: "bad"})
             p.return_value.classify.assert_called_once_with("bad")
-
-    @pytest.mark.asyncio
-    async def test_tool_output_reads_tool_calls(self):
-        c = _remote(threshold=0.5, blocked_labels=["toxic"])
-        cfg = _rails_cfg("t", c)
-        calls = [{"function": {"name": "rm", "arguments": {}}, "id": "1"}]
-        with _patch_backend([ClassificationResult(label="safe", score=0.1)]) as p:
-            await hf_classifier_check_tool_output(
-                classifier="t",
-                tool_calls=calls,
-                config=cfg,
-                context={},
-            )
-            text_arg = p.return_value.classify.call_args[0][0]
-            assert "rm" in text_arg
-
-    @pytest.mark.asyncio
-    async def test_tool_output_falls_back_to_context(self):
-        c = _remote(threshold=0.5, blocked_labels=["toxic"])
-        cfg = _rails_cfg("t", c)
-        calls = [{"function": {"name": "eval"}, "id": "2"}]
-        with _patch_backend([ClassificationResult(label="safe", score=0.1)]) as p:
-            await hf_classifier_check_tool_output(
-                classifier="t",
-                config=cfg,
-                context={"tool_calls": calls},
-            )
-            text_arg = p.return_value.classify.call_args[0][0]
-            assert "eval" in text_arg
 
     @pytest.mark.asyncio
     async def test_none_context_defaults_to_empty(self):
@@ -519,19 +499,6 @@ class TestActionContextKeys:
                 config=cfg,
                 context=None,
             )
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_tool_input_skips_on_missing_context_key(self):
-        c = _remote(threshold=0.5, blocked_labels=["toxic"])
-        cfg = _rails_cfg("t", c)
-        with _patch_backend([ClassificationResult(label="toxic", score=0.9)]) as p:
-            result = await hf_classifier_check_tool_input(
-                classifier="t",
-                config=cfg,
-                context={},
-            )
-            p.return_value.classify.assert_not_called()
         assert result is True
 
 
