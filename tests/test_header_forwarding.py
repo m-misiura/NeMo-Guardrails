@@ -65,5 +65,3 @@ def test_x_authorization_forwarded_without_authorization():
     _set_headers({"x-authorization": "Bearer llm-key"})
     result = get_extra_headers_from_request(forward_auth=True)
     assert result == {"Authorization": "Bearer llm-key"}
-
-

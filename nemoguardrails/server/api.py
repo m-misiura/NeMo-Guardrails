@@ -710,7 +710,7 @@ async def _load_rails_for_check(
     if config:
         # Process inline config
         if isinstance(config, dict):
-            config = _process_inline_config(config, model_name)
+            config = await _process_inline_config(config, model_name)
 
         rails_config = (
             RailsConfig.from_content(yaml_content=config)
@@ -776,7 +776,7 @@ def _validate_model_list(models: list) -> None:
             raise ValueError(f"Invalid model at index {idx}: expected dict, got {type(model).__name__}")
 
 
-def _inherit_models_from_server(server_config_id: str) -> list:
+async def _inherit_models_from_server(server_config_id: str) -> list:
     """Load and return models from server config.
 
     Args:
@@ -789,7 +789,7 @@ def _inherit_models_from_server(server_config_id: str) -> list:
         ValueError: If server config cannot be loaded or has no models
     """
     try:
-        default_rails = _get_rails([server_config_id])
+        default_rails = await _get_rails([server_config_id])
         if not default_rails.config.models:
             raise ValueError(f"Server config '{server_config_id}' has no models defined")
         return [_build_model_dict(model) for model in default_rails.config.models]
@@ -799,7 +799,7 @@ def _inherit_models_from_server(server_config_id: str) -> list:
         raise ValueError(f"Could not inherit models from server config '{server_config_id}': {e}") from e
 
 
-def _process_inline_config(config: dict, model_name: Optional[str]) -> dict:
+async def _process_inline_config(config: dict, model_name: Optional[str]) -> dict:
     """Process inline config to ensure it has valid models.
 
     Handles three scenarios:
@@ -832,7 +832,7 @@ def _process_inline_config(config: dict, model_name: Optional[str]) -> dict:
         _validate_model_list(config["models"])
     elif server_config_id:
         # Scenario 2: Inherit from server config
-        config["models"] = _inherit_models_from_server(server_config_id)
+        config["models"] = await _inherit_models_from_server(server_config_id)
         log.info(
             f"Inherited {len(config['models'])} model(s) from server config '{server_config_id}'"
             + (f", overriding main model with '{model_name}'" if model_name else "")
