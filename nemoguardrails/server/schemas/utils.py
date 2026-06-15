@@ -352,6 +352,11 @@ def generation_response_to_chat_completion(
                 # If conversion fails, skip the log
                 log_dict = None
 
+    message = build_chat_completion_message(bot_message, tool_calls)
+
+    if response.reasoning_content:
+        message.reasoning_content = response.reasoning_content  # type: ignore[attr-defined]
+
     return GuardrailsChatCompletion(
         id=f"chatcmpl-{uuid.uuid4()}",
         object="chat.completion",
@@ -360,7 +365,7 @@ def generation_response_to_chat_completion(
         choices=[
             Choice(
                 index=0,
-                message=build_chat_completion_message(bot_message, tool_calls),
+                message=message,
                 finish_reason=finish_reason,
                 logprobs=None,
             )
