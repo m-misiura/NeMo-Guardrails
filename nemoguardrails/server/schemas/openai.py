@@ -185,7 +185,7 @@ class GuardrailCheckDataInput(GuardrailsDataInput):
 
 
 class GuardrailCheckRequest(OpenAIChatCompletionRequest):
-    """Request body for the /v1/guardrail/checks endpoint."""
+    """Request body for the /v1/checks endpoint."""
 
     guardrails: GuardrailCheckDataInput = Field(
         default_factory=GuardrailCheckDataInput,
@@ -194,7 +194,7 @@ class GuardrailCheckRequest(OpenAIChatCompletionRequest):
 
 
 class GuardrailCheckResponse(BaseModel):
-    """Response from the /v1/guardrail/checks endpoint."""
+    """Response from the /v1/checks endpoint."""
 
     status: str = Field(..., description="Overall check result: passed, modified, or blocked.")
     content: str = Field(..., description="Content after rails processing.")

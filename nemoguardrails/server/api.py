@@ -654,7 +654,7 @@ def _map_rail_status(status: RailStatus) -> str:
 
 
 @app.post(
-    "/v1/guardrail/checks",
+    "/v1/checks",
     response_model=GuardrailCheckResponse,
     response_model_exclude_none=True,
 )

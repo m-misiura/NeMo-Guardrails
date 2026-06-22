@@ -25,7 +25,7 @@ from nemoguardrails.server import api
 
 client = TestClient(api.app)
 
-ENDPOINT = "/v1/guardrail/checks"
+ENDPOINT = "/v1/checks"
 
 
 @pytest.fixture(autouse=True)
