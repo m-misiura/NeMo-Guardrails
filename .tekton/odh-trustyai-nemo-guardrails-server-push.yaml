@@ -8,13 +8,13 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "develop"
+      == "incubation"
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: opendatahub-builds
     appstudio.openshift.io/component: odh-trustyai-nemo-guardrails-serve-ci
     pipelines.appstudio.openshift.io/type: build
-  name: odh-trustyai-nemo-guardrails-server-ci-on-push
+  name: odh-trustyai-nemo-guardrails-server-on-push
   namespace: open-data-hub-tenant
 spec:
   params:
