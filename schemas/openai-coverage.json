@@ -1,0 +1,189 @@
+{
+  "openai_spec": "schemas/openai-spec.yml",
+  "openai_version": "2.3.0",
+  "guardrails_spec": "fern/openapi.yml",
+  "summary": {
+    "endpoints": {
+      "implemented": 1,
+      "total": 3,
+      "missing": [
+        "/chat/completions/{completion_id}",
+        "/chat/completions/{completion_id}/messages"
+      ]
+    },
+    "conformance": {
+      "score": 81.8,
+      "issues": 16,
+      "missing_properties": 34,
+      "total_problems": 50,
+      "total_properties": 274
+    }
+  },
+  "categories": {
+    "Chat": {
+      "score": 81.8,
+      "issues": 16,
+      "missing_properties": 34,
+      "total_properties": 274,
+      "endpoints": [
+        {
+          "path": "/chat/completions",
+          "operations": [
+            {
+              "method": "POST",
+              "missing_properties": [
+                "POST.requestBody.content.application/json.properties.audio",
+                "POST.requestBody.content.application/json.properties.functions",
+                "POST.requestBody.content.application/json.properties.max_completion_tokens",
+                "POST.requestBody.content.application/json.properties.metadata",
+                "POST.requestBody.content.application/json.properties.modalities",
+                "POST.requestBody.content.application/json.properties.n",
+                "POST.requestBody.content.application/json.properties.parallel_tool_calls",
+                "POST.requestBody.content.application/json.properties.prediction",
+                "POST.requestBody.content.application/json.properties.prompt_cache_key",
+                "POST.requestBody.content.application/json.properties.prompt_cache_retention",
+                "POST.requestBody.content.application/json.properties.reasoning_effort",
+                "POST.requestBody.content.application/json.properties.response_format",
+                "POST.requestBody.content.application/json.properties.safety_identifier",
+                "POST.requestBody.content.application/json.properties.seed",
+                "POST.requestBody.content.application/json.properties.service_tier",
+                "POST.requestBody.content.application/json.properties.store",
+                "POST.requestBody.content.application/json.properties.stream_options",
+                "POST.requestBody.content.application/json.properties.tool_choice",
+                "POST.requestBody.content.application/json.properties.tools",
+                "POST.requestBody.content.application/json.properties.top_logprobs",
+                "POST.requestBody.content.application/json.properties.user",
+                "POST.requestBody.content.application/json.properties.verbosity",
+                "POST.requestBody.content.application/json.properties.web_search_options",
+                "POST.responses.200.content.application/json.properties.service_tier",
+                "POST.responses.200.content.application/json.properties.system_fingerprint",
+                "POST.responses.200.content.application/json.properties.usage",
+                "POST.responses.200.content.text/event-stream.properties.choices",
+                "POST.responses.200.content.text/event-stream.properties.created",
+                "POST.responses.200.content.text/event-stream.properties.id",
+                "POST.responses.200.content.text/event-stream.properties.model",
+                "POST.responses.200.content.text/event-stream.properties.object",
+                "POST.responses.200.content.text/event-stream.properties.service_tier",
+                "POST.responses.200.content.text/event-stream.properties.system_fingerprint",
+                "POST.responses.200.content.text/event-stream.properties.usage"
+              ],
+              "conformance_issues": [
+                {
+                  "property": "POST.requestBody.content.application/json.properties.frequency_penalty",
+                  "details": [
+                    "Type removed: ['null']",
+                    "Default changed: 0 -> None"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.function_call",
+                  "details": [
+                    "Type added: ['object']",
+                    "Union variants removed: 2"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.logit_bias",
+                  "details": [
+                    "Type removed: ['null']"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.logprobs",
+                  "details": [
+                    "Type removed: ['null']",
+                    "Default changed: False -> None"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.max_tokens",
+                  "details": [
+                    "Type removed: ['null']"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.messages.items",
+                  "details": [
+                    "Type added: ['object']",
+                    "Union variants removed: 6"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.model",
+                  "details": [
+                    "Type added: ['string']",
+                    "Union variants removed: 2"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.presence_penalty",
+                  "details": [
+                    "Type removed: ['null']",
+                    "Default changed: 0 -> None"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.stop",
+                  "details": [
+                    "Union variants added: 2",
+                    "Union variants removed: 2"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.stream",
+                  "details": [
+                    "Type removed: ['null']"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.temperature",
+                  "details": [
+                    "Type added: ['number']",
+                    "Nullable removed (OpenAI nullable)",
+                    "Union variants removed: 2"
+                  ]
+                },
+                {
+                  "property": "POST.requestBody.content.application/json.properties.top_p",
+                  "details": [
+                    "Type added: ['number']",
+                    "Nullable removed (OpenAI nullable)",
+                    "Union variants removed: 2"
+                  ]
+                },
+                {
+                  "property": "POST.responses.200.content.application/json.properties.choices.items.properties.finish_reason",
+                  "details": [
+                    "Enum removed: ['stop', 'length', 'tool_calls', 'content_filter', 'function_call']",
+                    "Type added: ['null']"
+                  ]
+                },
+                {
+                  "property": "POST.responses.200.content.application/json.properties.choices.items.properties.message.properties.content",
+                  "details": [
+                    "Nullable removed (OpenAI nullable)",
+                    "Union variants removed: 2"
+                  ]
+                },
+                {
+                  "property": "POST.responses.200.content.application/json.properties.choices.items.properties.message.properties.role",
+                  "details": [
+                    "Enum removed: ['assistant']"
+                  ]
+                },
+                {
+                  "property": "POST.responses.200.content.application/json.properties.object",
+                  "details": [
+                    "Enum removed: ['chat.completion']"
+                  ]
+                }
+              ],
+              "missing_count": 34,
+              "issues_count": 16
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

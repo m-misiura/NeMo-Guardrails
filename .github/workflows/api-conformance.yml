@@ -1,0 +1,75 @@
+# API conformance checks:
+#   PR:     breaking changes + coverage regression run via the api-conformance
+#           pre-commit hook in lint.yml.
+#   Weekly: this workflow checks for upstream OpenAI spec drift.
+
+name: API Conformance
+
+on:
+  schedule:
+    - cron: "23 9 * * 1"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OASDIFF_VERSION: "1.23.0"
+
+jobs:
+  drift:
+    name: Upstream Drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - uses: ./.github/actions/setup-uv
+      - run: uv sync --locked --group dev
+
+      - name: Install oasdiff
+        run: |
+          go install github.com/oasdiff/oasdiff@v${{ env.OASDIFF_VERSION }}
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Check for upstream spec drift
+        env:
+          SPEC_URL: "https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml"
+        run: |
+          curl -fsSL "$SPEC_URL" -o /tmp/openai-latest.yml
+          LATEST=$(grep -m1 '^\s*version:' /tmp/openai-latest.yml | sed 's/.*version:\s*//' | tr -d ' ')
+          PINNED=$(grep -m1 '^\s*version:' schemas/openai-spec.yml | sed 's/.*version:\s*//' | tr -d ' ')
+
+          {
+            echo "## OpenAI API Conformance"
+            echo ""
+            echo "| | Version |"
+            echo "|---|---|"
+            echo "| Vendored | ${PINNED} |"
+            echo "| Upstream | ${LATEST} |"
+            echo ""
+            echo "### Current conformance (against vendored v${PINNED})"
+            echo '```'
+            uv run --locked python scripts/openai_coverage.py 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$LATEST" = "$PINNED" ]; then
+            echo "Vendored spec is up to date (${PINNED})"
+          else
+            echo "::notice::Spec drift detected: vendored=${PINNED}, upstream=${LATEST}"
+            {
+              echo ""
+              echo "### Conformance against upstream v${LATEST}"
+              echo '```'
+              uv run --locked python scripts/openai_coverage.py --openai-spec /tmp/openai-latest.yml --output /dev/null 2>/dev/null || true
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

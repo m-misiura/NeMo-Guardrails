@@ -5,6 +5,7 @@ repos:
       - id: check-yaml
       - id: end-of-file-fixer
       - id: trailing-whitespace
+        exclude: ^schemas/openai-spec\.yml$
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
@@ -39,3 +40,16 @@ repos:
         pass_filenames: false
         always_run: true
         require_serial: true
+      - id: api-conformance
+        name: OpenAI spec conformance
+        entry: ./scripts/check-api-conformance.sh
+        language: golang
+        additional_dependencies:
+          - github.com/oasdiff/oasdiff@v1.23.0
+        pass_filenames: false
+        require_serial: true
+        verbose: true
+        files: ^(fern/openapi\.yml|schemas/openai-(spec\.yml|coverage\.json)|scripts/openai_coverage\.py)$
+
+ci:
+  skip: [api-conformance]
