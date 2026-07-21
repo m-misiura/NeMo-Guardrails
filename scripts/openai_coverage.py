@@ -44,7 +44,7 @@ def _run_oasdiff(
     *,
     match_path: str | None = None,
     extra_flags: list[str] | None = None,
-) -> dict[str, Any]:
+) -> Any:
     _require_oasdiff()
     cmd = ["oasdiff", subcommand, str(base), str(revision), "--format", "json"]
     cmd.extend(OASDIFF_SHARED_FLAGS)
@@ -91,54 +91,25 @@ def _check_breaking(spec: str = SPEC_PATH) -> bool:
     return True
 
 
-def _extract_endpoint_gaps(paths_diff: dict[str, Any]) -> dict[str, Any]:
-    """Extract missing/modified properties per implemented endpoint from oasdiff diff output."""
-    endpoints: dict[str, Any] = {}
-    for path, path_data in paths_diff.get("modified", {}).items():
-        ops = path_data.get("operations", {}).get("modified", {})
-        for method, op_data in ops.items():
-            key = f"{method} {path}"
-            missing: list[str] = []
-            modified: list[str] = []
-
-            req = op_data.get("requestBody", {}).get("content", {}).get("modified", {})
-            for content_type, ct_data in req.items():
-                props = ct_data.get("schema", {}).get("properties", {})
-                missing.extend(sorted(props.get("deleted", [])))
-                modified.extend(sorted(props.get("modified", {}).keys()))
-
-            resp = op_data.get("responses", {}).get("modified", {})
-            for _status, status_data in resp.items():
-                for content_type, ct_data in status_data.get("content", {}).get("modified", {}).items():
-                    props = ct_data.get("schema", {}).get("properties", {})
-                    resp_missing = sorted(props.get("deleted", []))
-                    resp_modified = sorted(props.get("modified", {}).keys())
-                    if content_type != "application/json":
-                        missing.extend(f"{content_type}:{p}" for p in resp_missing)
-                        modified.extend(f"{content_type}:{p}" for p in resp_modified)
-                    else:
-                        missing.extend(resp_missing)
-                        modified.extend(resp_modified)
-
-            endpoints[key] = {"missing": missing, "modified": modified}
-    return endpoints
-
-
 def analyze(openai_spec: Path, guardrails_spec: Path, match_path: str | None = None) -> dict[str, Any]:
     import yaml
 
     strip = ["--strip-prefix-revision", "/v1"]
-    diff = _run_oasdiff("diff", openai_spec, guardrails_spec, match_path=match_path, extra_flags=strip)
-    paths_diff = diff.get("paths", {})
+    changelog = _run_oasdiff("changelog", openai_spec, guardrails_spec, match_path=match_path, extra_flags=strip)
+
+    changes = [
+        {k: v for k, v in entry.items() if k not in ("baseSource", "revisionSource", "fingerprint")}
+        for entry in (changelog if isinstance(changelog, list) else [])
+        if entry.get("section") == "paths"
+    ]
+    changes.sort(key=lambda e: (e.get("path", ""), e.get("operation", ""), e.get("text", "")))
 
     spec_text = openai_spec.read_text()
     spec_data = yaml.safe_load(spec_text) if openai_spec.suffix in (".yml", ".yaml") else json.loads(spec_text)
 
     return {
         "openai_version": spec_data.get("info", {}).get("version", "unknown"),
-        "missing_paths": sorted(paths_diff.get("deleted", [])),
-        "endpoints": _extract_endpoint_gaps(paths_diff),
-        "diff": paths_diff,
+        "changes": changes,
     }
 
 
@@ -150,7 +121,7 @@ def main():
     parser.add_argument("--match-path", type=str, default="/chat/completions")
     parser.add_argument("--update", action="store_true", help="Update the coverage baseline file")
     parser.add_argument("--quiet", action="store_true", help="Only output errors")
-    parser.add_argument("--check-regression", action="store_true", help="Fail if missing property count increases")
+    parser.add_argument("--check-regression", action="store_true", help="Fail if change count increases")
     parser.add_argument("--check-breaking", action="store_true", help="Fail on breaking API changes vs HEAD")
     args = parser.parse_args()
 
@@ -173,49 +144,40 @@ def main():
         print(f"Error: {e}")
         sys.exit(1)
 
-    total_missing = sum(len(ep["missing"]) for ep in report["endpoints"].values())
-    total_modified = sum(len(ep["modified"]) for ep in report["endpoints"].values())
+    n_changes = len(report["changes"])
+    prev_changes = len(previous["changes"]) if previous and "changes" in previous else None
 
-    prev_missing: int | None = None
-    if previous:
-        prev_missing = sum(len(ep.get("missing", [])) for ep in previous.get("endpoints", {}).values())
-
-    if args.check_regression and prev_missing is not None:
-        if total_missing > prev_missing:
-            print(
-                f"Coverage regression: {prev_missing} -> {total_missing} missing properties (+{total_missing - prev_missing})"
-            )
+    if args.check_regression and prev_changes is not None:
+        if n_changes > prev_changes:
+            print(f"Coverage regression: {prev_changes} -> {n_changes} changes (+{n_changes - prev_changes})")
             print("To update the baseline: python scripts/openai_coverage.py --update")
             sys.exit(1)
-        elif total_missing < prev_missing and not args.quiet:
-            print(
-                f"Coverage improved: {prev_missing} -> {total_missing} missing properties (-{prev_missing - total_missing})"
-            )
+        elif n_changes < prev_changes and not args.quiet:
+            print(f"Coverage improved: {prev_changes} -> {n_changes} changes (-{prev_changes - n_changes})")
 
     if not args.quiet:
         ver = report["openai_version"]
-        for key, ep in report["endpoints"].items():
-            n_missing = len(ep["missing"])
-            n_modified = len(ep["modified"])
-            line = f"{key} (OpenAI v{ver}): {n_missing} missing, {n_modified} modified"
-            if prev_missing is not None:
-                line += f" (baseline: {prev_missing} missing)"
-            print(line)
-            if ep["missing"]:
-                print(f"  Missing: {', '.join(ep['missing'])}")
-            if ep["modified"]:
-                print(f"  Modified: {', '.join(ep['modified'])}")
-        if report["missing_paths"]:
-            print(f"  Unimplemented paths: {', '.join(report['missing_paths'])}")
+        unimplemented = [c for c in report["changes"] if c["id"] in ("api-removed-without-deprecation", "api-path-removed-without-deprecation")]
+        implemented = [c for c in report["changes"] if c not in unimplemented]
+        missing = [c for c in implemented if "removed" in c["id"]]
+        modified = [c for c in implemented if "removed" not in c["id"]]
+
+        line = f"POST /chat/completions (OpenAI v{ver}): {len(missing)} missing, {len(modified)} modified"
+        if prev_changes is not None:
+            line += f" (baseline: {prev_changes} changes)"
+        print(line)
+        if unimplemented:
+            paths = sorted({f"{c.get('operation', '?')} {c.get('path', '?')}" for c in unimplemented})
+            print(f"  Unimplemented: {', '.join(paths)}")
 
     if args.update:
-        stable = {k: v for k, v in report.items() if k != "diff"}
+        new_content = json.dumps(report, indent=2) + "\n"
         try:
-            old_stable = {k: v for k, v in json.loads(args.output.read_text()).items() if k != "diff"}
-        except (FileNotFoundError, json.JSONDecodeError):
-            old_stable = None
-        if stable != old_stable:
-            args.output.write_text(json.dumps(report, indent=2) + "\n")
+            old_content = args.output.read_text()
+        except FileNotFoundError:
+            old_content = ""
+        if new_content != old_content:
+            args.output.write_text(new_content)
 
 
 if __name__ == "__main__":

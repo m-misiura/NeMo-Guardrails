@@ -1,753 +1,860 @@
 {
   "openai_version": "2.3.0",
-  "missing_paths": [
-    "/chat/completions/{completion_id}",
-    "/chat/completions/{completion_id}/messages"
-  ],
-  "endpoints": {
-    "POST /chat/completions": {
-      "missing": [
-        "audio",
-        "functions",
-        "max_completion_tokens",
-        "metadata",
-        "modalities",
-        "n",
-        "parallel_tool_calls",
-        "prediction",
-        "prompt_cache_key",
-        "prompt_cache_retention",
-        "reasoning_effort",
-        "response_format",
-        "safety_identifier",
-        "seed",
-        "service_tier",
-        "store",
-        "stream_options",
-        "tool_choice",
-        "tools",
-        "top_logprobs",
-        "user",
-        "verbosity",
-        "web_search_options",
-        "service_tier",
-        "system_fingerprint",
-        "usage",
-        "text/event-stream:choices",
-        "text/event-stream:created",
-        "text/event-stream:id",
-        "text/event-stream:model",
-        "text/event-stream:object",
-        "text/event-stream:service_tier",
-        "text/event-stream:system_fingerprint",
-        "text/event-stream:usage"
-      ],
-      "modified": [
-        "frequency_penalty",
-        "function_call",
-        "logit_bias",
-        "logprobs",
-        "max_tokens",
-        "messages",
-        "model",
-        "presence_penalty",
-        "stop",
-        "stream",
-        "temperature",
-        "top_p",
-        "choices",
-        "created",
-        "id",
-        "model",
-        "object"
-      ]
+  "changes": [
+    {
+      "id": "api-removed-without-deprecation",
+      "text": "api removed without deprecation",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "listChatCompletions",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-one-of-added",
+      "text": "added `subschema #1, subschema #2` to the `stop` request property `oneOf` list",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "new-optional-request-property",
+      "text": "added the new optional request property `guardrails`",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "new-required-request-property",
+      "text": "added the new required request property `messages/items/content`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "new-required-request-property",
+      "text": "added the new required request property `messages/items/role`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-non-success-status-added",
+      "text": "added the non-success response with the status `422`",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-added",
+      "text": "added the optional property `guardrails` to the response with the `200` status (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "api-operation-id-removed",
+      "text": "api operation id `createChatCompletion` removed and replaced with `createGuardrailsChatCompletion`",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "api-tag-added",
+      "text": "api tag `Chat Completions` added",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "api-tag-removed",
+      "text": "api tag `Chat` removed",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-one-of-removed",
+      "text": "removed `#/components/schemas/ChatCompletionFunctionCallOption, subschema #1` from the `function_call` request property `oneOf` list",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-one-of-removed",
+      "text": "removed `#/components/schemas/ChatCompletionRequestDeveloperMessage, #/components/schemas/ChatCompletionRequestSystemMessage, #/components/schemas/ChatCompletionRequestUserMessage, #/components/schemas/ChatCompletionRequestAssistantMessage, #/components/schemas/ChatCompletionRequestToolMessage, #/components/schemas/ChatCompletionRequestFunctionMessage` from the `messages/items/` request property `oneOf` list",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-any-of-removed",
+      "text": "removed `subschema #1, subschema #2` from the `model` request property `anyOf` list",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-one-of-removed",
+      "text": "removed `subschema #1, subschema #2` from the `stop` request property `oneOf` list",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-discriminator-removed",
+      "text": "removed discriminator from `messages/items/` request property",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `assistant` enum value from the `choices/items/message/role` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `chat.completion` enum value from the `object` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `content_filter` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `function_call` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `length` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `stop` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `tool_calls` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `choices/items/message/annotations` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `choices/items/message/audio` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `choices/items/message/function_call` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `choices/items/message/tool_calls` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `service_tier` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `service_tier` from the response with the `200` status (media type: text/event-stream)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `system_fingerprint` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `system_fingerprint` from the response with the `200` status (media type: text/event-stream)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `usage` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `usage` from the response with the `200` status (media type: text/event-stream)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `audio`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `functions`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `max_completion_tokens`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `metadata`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `modalities`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `n`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `parallel_tool_calls`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `prediction`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `prompt_cache_key`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `prompt_cache_retention`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `reasoning_effort`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `response_format`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `safety_identifier`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `seed`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `service_tier`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `store`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `stream_options`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `tool_choice`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `tools`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `top_logprobs`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `user`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `verbosity`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `web_search_options`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `choices/items/logprobs` from the response with the `200` status (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `choices/items/message/refusal` from the response with the `200` status (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `choices` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `created` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `id` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `model` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `object` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-list-of-types-narrowed",
+      "text": "request property `temperature` list-of-types was narrowed by removing types `null` from media type `application/json`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-list-of-types-narrowed",
+      "text": "request property `top_p` list-of-types was narrowed by removing types `null` from media type `application/json`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-list-of-types-widened",
+      "text": "response property `choices/items/message/content` list-of-types was widened by adding types `array` to media type `application/json` of response `200`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-type-changed",
+      "text": "the `created` response's property `format` changed from `unixtime` to `none` for status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `frequency_penalty` request property `type/format` changed from `number, null` to `number/float`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-default-value-removed",
+      "text": "the `frequency_penalty` request property default value `0.00` was removed",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `function_call` request property `type` changed from `any` to `object`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-default-value-removed",
+      "text": "the `logprobs` request property default value `false` was removed",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `messages/items/` request property `type` changed from `any` to `object`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `model` request property `type` changed from `any` to `string`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `presence_penalty` request property `type/format` changed from `number, null` to `number/float`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-default-value-removed",
+      "text": "the `presence_penalty` request property default value `0.00` was removed",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `frequency_penalty` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `logit_bias` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `logprobs` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `max_tokens` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-optional",
+      "text": "the request property `messages` became optional",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `presence_penalty` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `stream` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-nullable",
+      "text": "the response property `choices/items/finish_reason` became nullable for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `choices/items/finish_reason` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `choices/items/index` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `choices/items/message` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `choices` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `created` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `id` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `model` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `object` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-body-type-changed",
+      "text": "the response's body `type` changed from `object` to `string` for status `200` (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "api-path-removed-without-deprecation",
+      "text": "api path removed without deprecation",
+      "level": 3,
+      "operation": "DELETE",
+      "operationId": "deleteChatCompletion",
+      "path": "/chat/completions/{completion_id}",
+      "section": "paths"
+    },
+    {
+      "id": "api-path-removed-without-deprecation",
+      "text": "api path removed without deprecation",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "getChatCompletion",
+      "path": "/chat/completions/{completion_id}",
+      "section": "paths"
+    },
+    {
+      "id": "api-path-removed-without-deprecation",
+      "text": "api path removed without deprecation",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "updateChatCompletion",
+      "path": "/chat/completions/{completion_id}",
+      "section": "paths"
+    },
+    {
+      "id": "api-path-removed-without-deprecation",
+      "text": "api path removed without deprecation",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "getChatCompletionMessages",
+      "path": "/chat/completions/{completion_id}/messages",
+      "section": "paths"
     }
-  },
-  "diff": {
-    "deleted": [
-      "/chat/completions/{completion_id}/messages",
-      "/chat/completions/{completion_id}"
-    ],
-    "modified": {
-      "/chat/completions": {
-        "operations": {
-          "deleted": [
-            "GET"
-          ],
-          "modified": {
-            "POST": {
-              "extensions": {
-                "deleted": [
-                  "x-oaiMeta"
-                ]
-              },
-              "tags": {
-                "added": [
-                  "Chat Completions"
-                ],
-                "deleted": [
-                  "Chat"
-                ]
-              },
-              "summary": {
-                "from": "**Starting a new project?** We recommend trying [Responses](/docs/api-reference/responses)\nto take advantage of the latest OpenAI platform features. Compare\n[Chat Completions with Responses](/docs/guides/responses-vs-chat-completions?api-mode=responses).\n\n---\n\nCreates a model response for the given chat conversation. Learn more in the\n[text generation](/docs/guides/text-generation), [vision](/docs/guides/vision),\nand [audio](/docs/guides/audio) guides.\n\nParameter support can differ depending on the model used to generate the\nresponse, particularly for newer reasoning models. Parameters that are only\nsupported for reasoning models are noted below. For the current state of\nunsupported parameters in reasoning models,\n[refer to the reasoning guide](/docs/guides/reasoning).\n\nReturns a chat completion object, or a streamed sequence of chat completion\nchunk objects if the request is streamed.\n",
-                "to": "Create a guarded chat completion"
-              },
-              "description": {
-                "from": "",
-                "to": "Generate a chat completion with guardrails applied.\n\nThe request shape is compatible with the OpenAI Chat Completions API and\naccepts Guardrails-specific options in the `guardrails` object.\n"
-              },
-              "operationID": {
-                "from": "createChatCompletion",
-                "to": "createGuardrailsChatCompletion"
-              },
-              "requestBody": {
-                "content": {
-                  "modified": {
-                    "application/json": {
-                      "schema": {
-                        "required": {
-                          "deleted": [
-                            "messages"
-                          ]
-                        },
-                        "properties": {
-                          "added": [
-                            "guardrails"
-                          ],
-                          "deleted": [
-                            "functions",
-                            "verbosity",
-                            "parallel_tool_calls",
-                            "top_logprobs",
-                            "safety_identifier",
-                            "store",
-                            "metadata",
-                            "prompt_cache_retention",
-                            "response_format",
-                            "modalities",
-                            "seed",
-                            "stream_options",
-                            "service_tier",
-                            "n",
-                            "max_completion_tokens",
-                            "tool_choice",
-                            "prediction",
-                            "prompt_cache_key",
-                            "user",
-                            "audio",
-                            "web_search_options",
-                            "reasoning_effort",
-                            "tools"
-                          ],
-                          "modified": {
-                            "frequency_penalty": {
-                              "type": {
-                                "deleted": [
-                                  "null"
-                                ]
-                              },
-                              "format": {
-                                "from": "",
-                                "to": "float"
-                              },
-                              "description": {
-                                "from": "Number between -2.0 and 2.0. Positive values penalize new tokens based on\ntheir existing frequency in the text so far, decreasing the model's\nlikelihood to repeat the same line verbatim.\n",
-                                "to": "Frequency penalty parameter."
-                              },
-                              "default": {
-                                "from": 0,
-                                "to": null
-                              },
-                              "min": {
-                                "from": -2,
-                                "to": null
-                              },
-                              "max": {
-                                "from": 2,
-                                "to": null
-                              }
-                            },
-                            "function_call": {
-                              "oneOf": {
-                                "deleted": [
-                                  {
-                                    "index": 1,
-                                    "component": "ChatCompletionFunctionCallOption"
-                                  },
-                                  {
-                                    "index": 0
-                                  }
-                                ]
-                              },
-                              "type": {
-                                "added": [
-                                  "object"
-                                ]
-                              },
-                              "description": {
-                                "from": "Deprecated in favor of `tool_choice`.\n\nControls which (if any) function is called by the model.\n\n`none` means the model will not call a function and instead generates a\nmessage.\n\n`auto` means the model can pick between generating a message or calling a\nfunction.\n\nSpecifying a particular function via `{\"name\": \"my_function\"}` forces the\nmodel to call that function.\n\n`none` is the default when no functions are present. `auto` is the default\nif functions are present.\n",
-                                "to": "Function call parameter."
-                              },
-                              "additionalPropertiesAllowed": {
-                                "from": null,
-                                "to": true
-                              }
-                            },
-                            "logit_bias": {
-                              "type": {
-                                "deleted": [
-                                  "null"
-                                ]
-                              },
-                              "description": {
-                                "from": "Modify the likelihood of specified tokens appearing in the completion.\n\nAccepts a JSON object that maps tokens (specified by their token ID in the\ntokenizer) to an associated bias value from -100 to 100. Mathematically,\nthe bias is added to the logits generated by the model prior to sampling.\nThe exact effect will vary per model, but values between -1 and 1 should\ndecrease or increase likelihood of selection; values like -100 or 100\nshould result in a ban or exclusive selection of the relevant token.\n",
-                                "to": "Logit bias parameter."
-                              },
-                              "additionalPropertiesAllowed": {
-                                "from": null,
-                                "to": true
-                              },
-                              "additionalProperties": {
-                                "schemaDeleted": true
-                              }
-                            },
-                            "logprobs": {
-                              "type": {
-                                "deleted": [
-                                  "null"
-                                ]
-                              },
-                              "description": {
-                                "from": "Whether to return log probabilities of the output tokens or not. If true,\nreturns the log probabilities of each output token returned in the\n`content` of `message`.\n",
-                                "to": "Log probabilities parameter."
-                              },
-                              "default": {
-                                "from": false,
-                                "to": null
-                              }
-                            },
-                            "max_tokens": {
-                              "type": {
-                                "deleted": [
-                                  "null"
-                                ]
-                              },
-                              "description": {
-                                "from": "The maximum number of [tokens](/tokenizer) that can be generated in the\nchat completion. This value can be used to control\n[costs](https://openai.com/api/pricing/) for text generated via API.\n\nThis value is now deprecated in favor of `max_completion_tokens`, and is\nnot compatible with [o-series models](/docs/guides/reasoning).\n",
-                                "to": "Maximum number of tokens to generate."
-                              }
-                            },
-                            "messages": {
-                              "description": {
-                                "from": "A list of messages comprising the conversation so far. Depending on the\n[model](/docs/models) you use, different message types (modalities) are\nsupported, like [text](/docs/guides/text-generation),\n[images](/docs/guides/vision), and [audio](/docs/guides/audio).\n",
-                                "to": "Chat messages in the current conversation."
-                              },
-                              "minItems": {
-                                "from": 1,
-                                "to": 0
-                              },
-                              "items": {
-                                "oneOf": {
-                                  "deleted": [
-                                    {
-                                      "index": 0,
-                                      "component": "ChatCompletionRequestDeveloperMessage"
-                                    },
-                                    {
-                                      "index": 1,
-                                      "component": "ChatCompletionRequestSystemMessage"
-                                    },
-                                    {
-                                      "index": 2,
-                                      "component": "ChatCompletionRequestUserMessage"
-                                    },
-                                    {
-                                      "index": 3,
-                                      "component": "ChatCompletionRequestAssistantMessage"
-                                    },
-                                    {
-                                      "index": 4,
-                                      "component": "ChatCompletionRequestToolMessage"
-                                    },
-                                    {
-                                      "index": 5,
-                                      "component": "ChatCompletionRequestFunctionMessage"
-                                    }
-                                  ]
-                                },
-                                "type": {
-                                  "added": [
-                                    "object"
-                                  ]
-                                },
-                                "additionalPropertiesAllowed": {
-                                  "from": null,
-                                  "to": true
-                                },
-                                "required": {
-                                  "added": [
-                                    "role",
-                                    "content"
-                                  ]
-                                },
-                                "properties": {
-                                  "added": [
-                                    "content",
-                                    "role"
-                                  ]
-                                },
-                                "discriminatorDiff": {
-                                  "deleted": true
-                                }
-                              }
-                            },
-                            "model": {
-                              "anyOf": {
-                                "deleted": [
-                                  {
-                                    "index": 0
-                                  },
-                                  {
-                                    "index": 1
-                                  }
-                                ]
-                              },
-                              "type": {
-                                "added": [
-                                  "string"
-                                ]
-                              },
-                              "description": {
-                                "from": "Model ID used to generate the response, like `gpt-4o` or `o3`. OpenAI\noffers a wide range of models with different capabilities, performance\ncharacteristics, and price points. Refer to the [model guide](/docs/models)\nto browse and compare available models.\n",
-                                "to": "LLM model to use for the completion."
-                              },
-                              "examples": {
-                                "from": null,
-                                "to": [
-                                  "meta/llama-3.1-8b-instruct"
-                                ]
-                              }
-                            },
-                            "presence_penalty": {
-                              "type": {
-                                "deleted": [
-                                  "null"
-                                ]
-                              },
-                              "format": {
-                                "from": "",
-                                "to": "float"
-                              },
-                              "description": {
-                                "from": "Number between -2.0 and 2.0. Positive values penalize new tokens based on\nwhether they appear in the text so far, increasing the model's likelihood\nto talk about new topics.\n",
-                                "to": "Presence penalty parameter."
-                              },
-                              "default": {
-                                "from": 0,
-                                "to": null
-                              },
-                              "min": {
-                                "from": -2,
-                                "to": null
-                              },
-                              "max": {
-                                "from": 2,
-                                "to": null
-                              }
-                            },
-                            "stop": {
-                              "oneOf": {
-                                "added": [
-                                  {
-                                    "index": 0
-                                  },
-                                  {
-                                    "index": 1
-                                  }
-                                ],
-                                "deleted": [
-                                  {
-                                    "index": 0
-                                  },
-                                  {
-                                    "index": 1
-                                  }
-                                ]
-                              },
-                              "description": {
-                                "from": "Not supported with latest reasoning models `o3` and `o4-mini`.\n\nUp to 4 sequences where the API will stop generating further tokens. The\nreturned text will not contain the stop sequence.\n",
-                                "to": "Stop sequence or sequences."
-                              }
-                            },
-                            "stream": {
-                              "type": {
-                                "deleted": [
-                                  "null"
-                                ]
-                              },
-                              "description": {
-                                "from": "If set to true, the model response data will be streamed to the client\nas it is generated using [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#Event_stream_format).\nSee the [Streaming section below](/docs/api-reference/chat/streaming)\nfor more information, along with the [streaming responses](/docs/guides/streaming-responses)\nguide for more information on how to handle the streaming events.\n",
-                                "to": "Return partial message deltas as server-sent events."
-                              }
-                            },
-                            "temperature": {
-                              "anyOf": {
-                                "deleted": [
-                                  {
-                                    "index": 0
-                                  },
-                                  {
-                                    "index": 1
-                                  }
-                                ]
-                              },
-                              "type": {
-                                "added": [
-                                  "number"
-                                ]
-                              },
-                              "format": {
-                                "from": "",
-                                "to": "float"
-                              },
-                              "description": {
-                                "from": "",
-                                "to": "Sampling temperature."
-                              },
-                              "listOfTypes": {
-                                "deleted": [
-                                  "null"
-                                ]
-                              }
-                            },
-                            "top_p": {
-                              "anyOf": {
-                                "deleted": [
-                                  {
-                                    "index": 0
-                                  },
-                                  {
-                                    "index": 1
-                                  }
-                                ]
-                              },
-                              "type": {
-                                "added": [
-                                  "number"
-                                ]
-                              },
-                              "format": {
-                                "from": "",
-                                "to": "float"
-                              },
-                              "description": {
-                                "from": "",
-                                "to": "Top-p sampling parameter."
-                              },
-                              "listOfTypes": {
-                                "deleted": [
-                                  "null"
-                                ]
-                              }
-                            }
-                          }
-                        }
-                      },
-                      "examples": {
-                        "added": [
-                          "basic",
-                          "streaming"
-                        ]
-                      }
-                    }
-                  }
-                }
-              },
-              "responses": {
-                "added": [
-                  "422"
-                ],
-                "modified": {
-                  "200": {
-                    "description": {
-                      "from": "OK",
-                      "to": "Chat completion response or server-sent event stream."
-                    },
-                    "content": {
-                      "modified": {
-                        "application/json": {
-                          "schema": {
-                            "extensions": {
-                              "deleted": [
-                                "x-oaiMeta"
-                              ]
-                            },
-                            "description": {
-                              "from": "Represents a chat completion response returned by model, based on the provided input.",
-                              "to": ""
-                            },
-                            "required": {
-                              "deleted": [
-                                "model",
-                                "object",
-                                "choices",
-                                "created",
-                                "id"
-                              ]
-                            },
-                            "properties": {
-                              "added": [
-                                "guardrails"
-                              ],
-                              "deleted": [
-                                "service_tier",
-                                "system_fingerprint",
-                                "usage"
-                              ],
-                              "modified": {
-                                "choices": {
-                                  "description": {
-                                    "from": "A list of chat completion choices. Can be more than one if `n` is greater than 1.",
-                                    "to": ""
-                                  },
-                                  "items": {
-                                    "required": {
-                                      "deleted": [
-                                        "logprobs",
-                                        "finish_reason",
-                                        "index",
-                                        "message"
-                                      ]
-                                    },
-                                    "properties": {
-                                      "deleted": [
-                                        "logprobs"
-                                      ],
-                                      "modified": {
-                                        "finish_reason": {
-                                          "type": {
-                                            "added": [
-                                              "null"
-                                            ]
-                                          },
-                                          "description": {
-                                            "from": "The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence,\n`length` if the maximum number of tokens specified in the request was reached,\n`content_filter` if content was omitted due to a flag from our content filters,\n`tool_calls` if the model called a tool, or `function_call` (deprecated) if the model called a function.\n",
-                                            "to": ""
-                                          },
-                                          "enum": {
-                                            "enumDeleted": true,
-                                            "deleted": [
-                                              "stop",
-                                              "length",
-                                              "tool_calls",
-                                              "content_filter",
-                                              "function_call"
-                                            ]
-                                          }
-                                        },
-                                        "index": {
-                                          "description": {
-                                            "from": "The index of the choice in the list of choices.",
-                                            "to": ""
-                                          }
-                                        },
-                                        "message": {
-                                          "description": {
-                                            "from": "A chat completion message generated by the model.",
-                                            "to": ""
-                                          },
-                                          "additionalPropertiesAllowed": {
-                                            "from": null,
-                                            "to": true
-                                          },
-                                          "required": {
-                                            "deleted": [
-                                              "refusal"
-                                            ]
-                                          },
-                                          "properties": {
-                                            "deleted": [
-                                              "refusal",
-                                              "tool_calls",
-                                              "annotations",
-                                              "audio",
-                                              "function_call"
-                                            ],
-                                            "modified": {
-                                              "content": {
-                                                "oneOf": {
-                                                  "added": [
-                                                    {
-                                                      "index": 0
-                                                    },
-                                                    {
-                                                      "index": 1
-                                                    }
-                                                  ]
-                                                },
-                                                "anyOf": {
-                                                  "deleted": [
-                                                    {
-                                                      "index": 0
-                                                    },
-                                                    {
-                                                      "index": 1
-                                                    }
-                                                  ]
-                                                },
-                                                "description": {
-                                                  "from": "",
-                                                  "to": "Message content."
-                                                },
-                                                "listOfTypes": {
-                                                  "added": [
-                                                    "array"
-                                                  ],
-                                                  "deleted": [
-                                                    "null"
-                                                  ]
-                                                }
-                                              },
-                                              "role": {
-                                                "extensions": {
-                                                  "deleted": [
-                                                    "x-stainless-const"
-                                                  ]
-                                                },
-                                                "description": {
-                                                  "from": "The role of the author of this message.",
-                                                  "to": "Message role, such as `system`, `user`, `assistant`, `tool`, or `context`."
-                                                },
-                                                "enum": {
-                                                  "enumDeleted": true,
-                                                  "deleted": [
-                                                    "assistant"
-                                                  ]
-                                                },
-                                                "examples": {
-                                                  "from": null,
-                                                  "to": [
-                                                    "user"
-                                                  ]
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                },
-                                "created": {
-                                  "format": {
-                                    "from": "unixtime",
-                                    "to": ""
-                                  },
-                                  "description": {
-                                    "from": "The Unix timestamp (in seconds) of when the chat completion was created.",
-                                    "to": ""
-                                  }
-                                },
-                                "id": {
-                                  "description": {
-                                    "from": "A unique identifier for the chat completion.",
-                                    "to": ""
-                                  }
-                                },
-                                "model": {
-                                  "description": {
-                                    "from": "The model used for the chat completion.",
-                                    "to": ""
-                                  }
-                                },
-                                "object": {
-                                  "extensions": {
-                                    "deleted": [
-                                      "x-stainless-const"
-                                    ]
-                                  },
-                                  "description": {
-                                    "from": "The object type, which is always `chat.completion`.",
-                                    "to": ""
-                                  },
-                                  "enum": {
-                                    "enumDeleted": true,
-                                    "deleted": [
-                                      "chat.completion"
-                                    ]
-                                  },
-                                  "examples": {
-                                    "from": null,
-                                    "to": [
-                                      "chat.completion"
-                                    ]
-                                  }
-                                }
-                              }
-                            }
-                          },
-                          "examples": {
-                            "added": [
-                              "success"
-                            ]
-                          }
-                        },
-                        "text/event-stream": {
-                          "schema": {
-                            "extensions": {
-                              "deleted": [
-                                "x-oaiMeta"
-                              ]
-                            },
-                            "type": {
-                              "added": [
-                                "string"
-                              ],
-                              "deleted": [
-                                "object"
-                              ]
-                            },
-                            "description": {
-                              "from": "Represents a streamed chunk of a chat completion response returned\nby the model, based on the provided input. \n[Learn more](/docs/guides/streaming-responses).\n",
-                              "to": ""
-                            },
-                            "required": {
-                              "deleted": [
-                                "object",
-                                "choices",
-                                "created",
-                                "id",
-                                "model"
-                              ]
-                            },
-                            "properties": {
-                              "deleted": [
-                                "usage",
-                                "choices",
-                                "created",
-                                "id",
-                                "model",
-                                "object",
-                                "service_tier",
-                                "system_fingerprint"
-                              ]
-                            }
-                          },
-                          "example": {
-                            "from": null,
-                            "to": "data: {\"id\":\"chatcmpl-abc123\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"meta/llama-3.1-8b-instruct\",\"choices\":[{\"delta\":{\"content\":\"Paris\"},\"index\":0,\"finish_reason\":null}]}\n\ndata: [DONE]\n"
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+  ]
 }
