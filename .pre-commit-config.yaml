@@ -42,7 +42,7 @@ repos:
         require_serial: true
       - id: api-conformance
         name: OpenAI spec conformance
-        entry: ./scripts/check-api-conformance.sh
+        entry: uv run --locked python scripts/openai_coverage.py --check-breaking --check-regression --update
         language: golang
         additional_dependencies:
           - github.com/oasdiff/oasdiff@v1.23.0

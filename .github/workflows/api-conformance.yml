@@ -47,6 +47,8 @@ jobs:
           LATEST=$(grep -m1 '^\s*version:' /tmp/openai-latest.yml | sed 's/.*version:\s*//' | tr -d ' ')
           PINNED=$(grep -m1 '^\s*version:' schemas/openai-spec.yml | sed 's/.*version:\s*//' | tr -d ' ')
 
+          VENDORED_REPORT=$(uv run --locked python scripts/openai_coverage.py 2>&1) || true
+
           {
             echo "## OpenAI API Conformance"
             echo ""
@@ -57,19 +59,23 @@ jobs:
             echo ""
             echo "### Current conformance (against vendored v${PINNED})"
             echo '```'
-            uv run --locked python scripts/openai_coverage.py 2>/dev/null || true
+            echo "$VENDORED_REPORT"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "$VENDORED_REPORT"
 
           if [ "$LATEST" = "$PINNED" ]; then
             echo "Vendored spec is up to date (${PINNED})"
           else
             echo "::notice::Spec drift detected: vendored=${PINNED}, upstream=${LATEST}"
+            UPSTREAM_REPORT=$(uv run --locked python scripts/openai_coverage.py --openai-spec /tmp/openai-latest.yml --output /dev/null 2>&1) || true
             {
               echo ""
               echo "### Conformance against upstream v${LATEST}"
               echo '```'
-              uv run --locked python scripts/openai_coverage.py --openai-spec /tmp/openai-latest.yml --output /dev/null 2>/dev/null || true
+              echo "$UPSTREAM_REPORT"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+            echo "$UPSTREAM_REPORT"
           fi
