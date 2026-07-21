@@ -18,41 +18,18 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
-import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
 SPEC_PATH = "fern/openapi.yml"
-OASDIFF_SHARED_FLAGS = ["--auto-upgrade", "--flatten-allof"]
 
 
-def _require_oasdiff() -> None:
-    if not shutil.which("oasdiff"):
-        print("Error: oasdiff is not installed or not in PATH")
-        print("Install with: go install github.com/oasdiff/oasdiff@v1.23.0")
-        sys.exit(1)
-
-
-def _run_oasdiff(
-    subcommand: str,
-    base: Path | str,
-    revision: Path | str,
-    *,
-    match_path: str | None = None,
-    extra_flags: list[str] | None = None,
-) -> Any:
-    _require_oasdiff()
-    cmd = ["oasdiff", subcommand, str(base), str(revision), "--format", "json"]
-    cmd.extend(OASDIFF_SHARED_FLAGS)
-    if match_path:
-        cmd.extend(["--match-path", match_path])
+def _run_oasdiff(subcommand: str, base: str, revision: str, *, extra_flags: list[str] | None = None) -> Any:
+    cmd = ["oasdiff", subcommand, base, revision, "--format", "json", "--auto-upgrade", "--flatten-allof"]
     if extra_flags:
         cmd.extend(extra_flags)
-
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0 and not result.stdout:
         raise RuntimeError(f"oasdiff {subcommand} failed: {result.stderr}")
@@ -60,42 +37,37 @@ def _run_oasdiff(
 
 
 def _check_breaking(spec: str = SPEC_PATH) -> bool:
-    commit_msg = Path(".git/COMMIT_EDITMSG")
-    if commit_msg.exists():
-        try:
-            if re.search(r"!:|BREAKING CHANGE:", commit_msg.read_text()):
-                return True
-        except OSError:
-            pass
-
     if not Path(spec).exists():
         return True
-
-    _require_oasdiff()
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=True) as tmp:
-        git_result = subprocess.run(["git", "show", f"HEAD:{spec}"], capture_output=True, text=True)
-        if git_result.returncode != 0:
-            return True
-        tmp.write(git_result.stdout)
-        tmp.flush()
-
-        result = subprocess.run(
-            ["oasdiff", "breaking", "--fail-on", "ERR", *OASDIFF_SHARED_FLAGS, "--match-path", "^/v1/", tmp.name, spec],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            print(result.stdout or result.stderr)
-            return False
+    result = subprocess.run(
+        [
+            "oasdiff",
+            "breaking",
+            f"HEAD:{spec}",
+            spec,
+            "--fail-on",
+            "ERR",
+            "--auto-upgrade",
+            "--flatten-allof",
+            "--match-path",
+            "^/v1/",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(result.stdout or result.stderr)
+        return False
     return True
 
 
 def analyze(openai_spec: Path, guardrails_spec: Path, match_path: str | None = None) -> dict[str, Any]:
     import yaml
 
-    strip = ["--strip-prefix-revision", "/v1"]
-    changelog = _run_oasdiff("changelog", openai_spec, guardrails_spec, match_path=match_path, extra_flags=strip)
+    flags = ["--strip-prefix-revision", "/v1"]
+    if match_path:
+        flags.extend(["--match-path", match_path])
+    changelog = _run_oasdiff("changelog", str(openai_spec), str(guardrails_spec), extra_flags=flags)
 
     changes = [
         {k: v for k, v in entry.items() if k not in ("baseSource", "revisionSource", "fingerprint")}
