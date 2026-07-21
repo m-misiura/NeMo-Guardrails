@@ -1,0 +1,860 @@
+{
+  "openai_version": "2.3.0",
+  "changes": [
+    {
+      "id": "api-removed-without-deprecation",
+      "text": "api removed without deprecation",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "listChatCompletions",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-one-of-added",
+      "text": "added `subschema #1, subschema #2` to the `stop` request property `oneOf` list",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "new-optional-request-property",
+      "text": "added the new optional request property `guardrails`",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "new-required-request-property",
+      "text": "added the new required request property `messages/items/content`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "new-required-request-property",
+      "text": "added the new required request property `messages/items/role`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-non-success-status-added",
+      "text": "added the non-success response with the status `422`",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-added",
+      "text": "added the optional property `guardrails` to the response with the `200` status (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "api-operation-id-removed",
+      "text": "api operation id `createChatCompletion` removed and replaced with `createGuardrailsChatCompletion`",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "api-tag-added",
+      "text": "api tag `Chat Completions` added",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "api-tag-removed",
+      "text": "api tag `Chat` removed",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-one-of-removed",
+      "text": "removed `#/components/schemas/ChatCompletionFunctionCallOption, subschema #1` from the `function_call` request property `oneOf` list",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-one-of-removed",
+      "text": "removed `#/components/schemas/ChatCompletionRequestDeveloperMessage, #/components/schemas/ChatCompletionRequestSystemMessage, #/components/schemas/ChatCompletionRequestUserMessage, #/components/schemas/ChatCompletionRequestAssistantMessage, #/components/schemas/ChatCompletionRequestToolMessage, #/components/schemas/ChatCompletionRequestFunctionMessage` from the `messages/items/` request property `oneOf` list",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-any-of-removed",
+      "text": "removed `subschema #1, subschema #2` from the `model` request property `anyOf` list",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-one-of-removed",
+      "text": "removed `subschema #1, subschema #2` from the `stop` request property `oneOf` list",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-discriminator-removed",
+      "text": "removed discriminator from `messages/items/` request property",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `assistant` enum value from the `choices/items/message/role` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `chat.completion` enum value from the `object` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `content_filter` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `function_call` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `length` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `stop` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-enum-value-removed",
+      "text": "removed the `tool_calls` enum value from the `choices/items/finish_reason` response property for the response status `200` (media type: application/json)",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `choices/items/message/annotations` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `choices/items/message/audio` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `choices/items/message/function_call` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `choices/items/message/tool_calls` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `service_tier` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `service_tier` from the response with the `200` status (media type: text/event-stream)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `system_fingerprint` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `system_fingerprint` from the response with the `200` status (media type: text/event-stream)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `usage` from the response with the `200` status (media type: application/json)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-optional-property-removed",
+      "text": "removed the optional property `usage` from the response with the `200` status (media type: text/event-stream)",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `audio`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `functions`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `max_completion_tokens`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `metadata`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `modalities`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `n`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `parallel_tool_calls`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `prediction`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `prompt_cache_key`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `prompt_cache_retention`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `reasoning_effort`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `response_format`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `safety_identifier`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `seed`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `service_tier`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `store`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `stream_options`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `tool_choice`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `tools`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `top_logprobs`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `user`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `verbosity`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-removed",
+      "text": "removed the request property `web_search_options`",
+      "level": 2,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `choices/items/logprobs` from the response with the `200` status (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `choices/items/message/refusal` from the response with the `200` status (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `choices` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `created` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `id` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `model` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-required-property-removed",
+      "text": "removed the required property `object` from the response with the `200` status (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-list-of-types-narrowed",
+      "text": "request property `temperature` list-of-types was narrowed by removing types `null` from media type `application/json`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-list-of-types-narrowed",
+      "text": "request property `top_p` list-of-types was narrowed by removing types `null` from media type `application/json`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-list-of-types-widened",
+      "text": "response property `choices/items/message/content` list-of-types was widened by adding types `array` to media type `application/json` of response `200`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-type-changed",
+      "text": "the `created` response's property `format` changed from `unixtime` to `none` for status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `frequency_penalty` request property `type/format` changed from `number, null` to `number/float`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-default-value-removed",
+      "text": "the `frequency_penalty` request property default value `0.00` was removed",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `function_call` request property `type` changed from `any` to `object`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-default-value-removed",
+      "text": "the `logprobs` request property default value `false` was removed",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `messages/items/` request property `type` changed from `any` to `object`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `model` request property `type` changed from `any` to `string`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-type-changed",
+      "text": "the `presence_penalty` request property `type/format` changed from `number, null` to `number/float`",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-default-value-removed",
+      "text": "the `presence_penalty` request property default value `0.00` was removed",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `frequency_penalty` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `logit_bias` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `logprobs` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `max_tokens` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-optional",
+      "text": "the request property `messages` became optional",
+      "level": 1,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `presence_penalty` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "request-property-became-not-nullable",
+      "text": "the request property `stream` became not nullable",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-nullable",
+      "text": "the response property `choices/items/finish_reason` became nullable for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `choices/items/finish_reason` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `choices/items/index` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `choices/items/message` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `choices` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `created` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `id` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `model` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-property-became-optional",
+      "text": "the response property `object` became optional for the status `200` (media type: application/json)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "response-body-type-changed",
+      "text": "the response's body `type` changed from `object` to `string` for status `200` (media type: text/event-stream)",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "createGuardrailsChatCompletion",
+      "path": "/chat/completions",
+      "section": "paths"
+    },
+    {
+      "id": "api-path-removed-without-deprecation",
+      "text": "api path removed without deprecation",
+      "level": 3,
+      "operation": "DELETE",
+      "operationId": "deleteChatCompletion",
+      "path": "/chat/completions/{completion_id}",
+      "section": "paths"
+    },
+    {
+      "id": "api-path-removed-without-deprecation",
+      "text": "api path removed without deprecation",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "getChatCompletion",
+      "path": "/chat/completions/{completion_id}",
+      "section": "paths"
+    },
+    {
+      "id": "api-path-removed-without-deprecation",
+      "text": "api path removed without deprecation",
+      "level": 3,
+      "operation": "POST",
+      "operationId": "updateChatCompletion",
+      "path": "/chat/completions/{completion_id}",
+      "section": "paths"
+    },
+    {
+      "id": "api-path-removed-without-deprecation",
+      "text": "api path removed without deprecation",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "getChatCompletionMessages",
+      "path": "/chat/completions/{completion_id}/messages",
+      "section": "paths"
+    }
+  ]
+}
