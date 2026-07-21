@@ -182,11 +182,15 @@ def main():
 
     if args.check_regression and prev_missing is not None:
         if total_missing > prev_missing:
-            print(f"Coverage regression: {prev_missing} -> {total_missing} missing properties (+{total_missing - prev_missing})")
+            print(
+                f"Coverage regression: {prev_missing} -> {total_missing} missing properties (+{total_missing - prev_missing})"
+            )
             print("To update the baseline: python scripts/openai_coverage.py --update")
             sys.exit(1)
         elif total_missing < prev_missing and not args.quiet:
-            print(f"Coverage improved: {prev_missing} -> {total_missing} missing properties (-{prev_missing - total_missing})")
+            print(
+                f"Coverage improved: {prev_missing} -> {total_missing} missing properties (-{prev_missing - total_missing})"
+            )
 
     if not args.quiet:
         ver = report["openai_version"]
