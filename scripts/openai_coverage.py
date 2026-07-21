@@ -107,7 +107,7 @@ def main():
     parser = argparse.ArgumentParser(description="OpenAI API conformance analyzer for NeMo Guardrails")
     parser.add_argument("--openai-spec", type=Path, default=Path("schemas/openai-spec.yml"))
     parser.add_argument("--guardrails-spec", type=Path, default=Path("fern/openapi.yml"))
-    parser.add_argument("--output", type=Path, default=Path("schemas/openai-coverage.json"))
+    parser.add_argument("--output", type=Path, default=Path("schemas/openai-conformance-baseline.json"))
     parser.add_argument("--match-path", type=str, default="/chat/completions")
     parser.add_argument("--update", action="store_true", help="Update the coverage baseline file")
     parser.add_argument("--quiet", action="store_true", help="Only output errors")

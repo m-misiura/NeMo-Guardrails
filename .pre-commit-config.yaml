@@ -42,14 +42,14 @@ repos:
         require_serial: true
       - id: api-conformance
         name: OpenAI spec conformance
-        entry: uv run --locked python scripts/openai_coverage.py --check-breaking --check-regression --update
+        entry: uv run --locked python scripts/openai_coverage.py --check-breaking --check-regression --update --quiet
         language: golang
         additional_dependencies:
           - github.com/oasdiff/oasdiff@v1.23.0
         pass_filenames: false
         require_serial: true
         verbose: true
-        files: ^(fern/openapi\.yml|schemas/openai-(spec\.yml|coverage\.json)|scripts/openai_coverage\.py)$
+        files: ^(fern/openapi\.yml|schemas/openai-(spec\.yml|conformance-baseline\.json)|scripts/openai_coverage\.py)$
 
 ci:
   skip: [api-conformance]
