@@ -85,7 +85,7 @@ def analyze(openai_spec: Path, guardrails_spec: Path, match_path: str | None = N
     }
 
 
-def _print_report(report: dict[str, Any], prev_changes: int | None) -> None:
+def _print_report(report: dict[str, Any], prev_changes: int | None, *, verbose: bool = False) -> None:
     ver = report["openai_version"]
     changes = report["changes"]
 
@@ -93,6 +93,9 @@ def _print_report(report: dict[str, Any], prev_changes: int | None) -> None:
     if prev_changes is not None:
         header += f" (baseline: {prev_changes})"
     print(header)
+
+    if not verbose:
+        return
 
     current_endpoint = ""
     for c in changes:
@@ -142,11 +145,10 @@ def main():
             print(f"Coverage regression: {prev_changes} -> {n_changes} changes (+{n_changes - prev_changes})")
             print("To update the baseline: python scripts/openai_coverage.py --update")
             sys.exit(1)
-        elif n_changes < prev_changes and not args.quiet:
+        elif n_changes < prev_changes:
             print(f"Coverage improved: {prev_changes} -> {n_changes} changes (-{prev_changes - n_changes})")
 
-    if not args.quiet:
-        _print_report(report, prev_changes)
+    _print_report(report, prev_changes, verbose=not args.quiet)
 
     if args.update:
         new_content = json.dumps(report, indent=2) + "\n"
