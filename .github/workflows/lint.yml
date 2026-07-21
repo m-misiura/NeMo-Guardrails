@@ -22,6 +22,7 @@ jobs:
       - uses: actions/checkout@v7.0.0
         with:
           persist-credentials: false
+          fetch-depth: 2  # api-conformance hook needs HEAD~1
 
       - name: Set up Python
         uses: actions/setup-python@v6
