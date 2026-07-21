@@ -113,6 +113,24 @@ def analyze(openai_spec: Path, guardrails_spec: Path, match_path: str | None = N
     }
 
 
+def _print_report(report: dict[str, Any], prev_changes: int | None) -> None:
+    ver = report["openai_version"]
+    changes = report["changes"]
+
+    header = f"OpenAI v{ver}: {len(changes)} changes"
+    if prev_changes is not None:
+        header += f" (baseline: {prev_changes})"
+    print(header)
+
+    current_endpoint = ""
+    for c in changes:
+        endpoint = f"{c.get('operation', '?')} {c.get('path', '?')}"
+        if endpoint != current_endpoint:
+            current_endpoint = endpoint
+            print(f"  {endpoint}:")
+        print(f"    {c['text']}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="OpenAI API conformance analyzer for NeMo Guardrails")
     parser.add_argument("--openai-spec", type=Path, default=Path("schemas/openai-spec.yml"))
@@ -156,23 +174,7 @@ def main():
             print(f"Coverage improved: {prev_changes} -> {n_changes} changes (-{prev_changes - n_changes})")
 
     if not args.quiet:
-        ver = report["openai_version"]
-        unimplemented = [
-            c
-            for c in report["changes"]
-            if c["id"] in ("api-removed-without-deprecation", "api-path-removed-without-deprecation")
-        ]
-        implemented = [c for c in report["changes"] if c not in unimplemented]
-        missing = [c for c in implemented if "removed" in c["id"]]
-        modified = [c for c in implemented if "removed" not in c["id"]]
-
-        line = f"POST /chat/completions (OpenAI v{ver}): {len(missing)} missing, {len(modified)} modified"
-        if prev_changes is not None:
-            line += f" (baseline: {prev_changes} changes)"
-        print(line)
-        if unimplemented:
-            paths = sorted({f"{c.get('operation', '?')} {c.get('path', '?')}" for c in unimplemented})
-            print(f"  Unimplemented: {', '.join(paths)}")
+        _print_report(report, prev_changes)
 
     if args.update:
         new_content = json.dumps(report, indent=2) + "\n"
