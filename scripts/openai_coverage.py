@@ -157,7 +157,11 @@ def main():
 
     if not args.quiet:
         ver = report["openai_version"]
-        unimplemented = [c for c in report["changes"] if c["id"] in ("api-removed-without-deprecation", "api-path-removed-without-deprecation")]
+        unimplemented = [
+            c
+            for c in report["changes"]
+            if c["id"] in ("api-removed-without-deprecation", "api-path-removed-without-deprecation")
+        ]
         implemented = [c for c in report["changes"] if c not in unimplemented]
         missing = [c for c in implemented if "removed" in c["id"]]
         modified = [c for c in implemented if "removed" not in c["id"]]
