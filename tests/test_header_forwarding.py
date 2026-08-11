@@ -15,6 +15,8 @@
 
 """Tests for header forwarding and log redaction."""
 
+import pytest
+
 from nemoguardrails.header_forwarding import api_request_headers_var, get_extra_headers_from_request
 
 
@@ -64,3 +66,57 @@ def test_x_authorization_forwarded_without_authorization():
     _set_headers({"x-authorization": "Bearer llm-key"})
     result = get_extra_headers_from_request(forward_auth=True)
     assert result == {"Authorization": "Bearer llm-key"}
+
+
+# ---------------------------------------------------------------------------
+# Regression: extra_headers must arrive as HTTP headers, not JSON body fields
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_extra_headers_sent_as_http_headers_not_json_body(httpx_mock):
+    """Regression test for rhoai-3.5: extra_headers was serialised into the
+    JSON request body instead of being sent as HTTP headers."""
+    from nemoguardrails.llm.clients.openai_compatible import OpenAICompatibleClient
+
+    httpx_mock.add_response(
+        json={
+            "choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}],
+            "model": "test",
+        }
+    )
+
+    client = OpenAICompatibleClient(base_url="https://llm.example.com/v1", api_key="static-key")
+    await client.chat_completion(
+        "test-model",
+        [{"role": "user", "content": "hi"}],
+        extra_headers={"Authorization": "Bearer forwarded-key", "x-custom": "val"},
+    )
+
+    request = httpx_mock.get_request()
+    assert request.headers["Authorization"] == "Bearer forwarded-key"
+    assert request.headers["x-custom"] == "val"
+
+    import json
+
+    body = json.loads(request.content)
+    assert "extra_headers" not in body
+
+
+@pytest.mark.asyncio
+async def test_extra_headers_not_provided_uses_static_key(httpx_mock):
+    """When no extra_headers are passed, static api_key auth is used."""
+    from nemoguardrails.llm.clients.openai_compatible import OpenAICompatibleClient
+
+    httpx_mock.add_response(
+        json={
+            "choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}],
+            "model": "test",
+        }
+    )
+
+    client = OpenAICompatibleClient(base_url="https://llm.example.com/v1", api_key="static-key")
+    await client.chat_completion("test-model", [{"role": "user", "content": "hi"}])
+
+    request = httpx_mock.get_request()
+    assert request.headers["Authorization"] == "Bearer static-key"
