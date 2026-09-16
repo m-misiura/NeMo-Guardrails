@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import Any, Dict, Optional
 
 import pytest
@@ -28,6 +27,10 @@ from nemoguardrails.library.clavata.request import (
     SectionReport,
 )
 from tests.utils import TestChat
+
+pytestmark = pytest.mark.skip(
+    reason="aioresponses 0.7.9 incompatible with aiohttp >=3.14 (missing stream_writer kwarg)"
+)
 
 
 @action(is_system_action=True)

@@ -13,10 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
 from aioresponses import aioresponses
 
 from nemoguardrails import RailsConfig
 from tests.utils import TestChat
+
+pytestmark = pytest.mark.skip(
+    reason="aioresponses 0.7.9 incompatible with aiohttp >=3.14 (missing stream_writer kwarg)"
+)
 
 
 def test_input(monkeypatch):
