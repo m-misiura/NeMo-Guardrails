@@ -82,9 +82,7 @@ ENV HF_HOME=/app/.cache/huggingface \
     PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     DO_NOT_TRACK=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
-    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+    PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8000
 ENTRYPOINT ["./scripts/entrypoint.sh"]
