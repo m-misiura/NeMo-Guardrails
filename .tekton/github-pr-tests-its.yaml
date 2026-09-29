@@ -1,0 +1,20 @@
+apiVersion: appstudio.redhat.com/v1beta2
+kind: IntegrationTestScenario
+metadata:
+  name: github-pr-tests
+  namespace: rhoai-tenant
+spec:
+  application: automation
+  contexts:
+    - name: pull_request
+      description: Run unit tests and inspect the Konflux candidate image
+  resolverRef:
+    resolver: git
+    resourceKind: pipeline
+    params:
+      - name: url
+        value: https://github.com/red-hat-data-services/NeMo-Guardrails
+      - name: revision
+        value: konflux-integration-tests
+      - name: pathInRepo
+        value: .tekton/github-pr-tests-pipeline.yaml

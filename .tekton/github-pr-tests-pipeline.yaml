@@ -1,0 +1,81 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: github-pr-tests
+spec:
+  params:
+    - name: SNAPSHOT
+      type: string
+      description: Konflux application snapshot under test
+  tasks:
+    - name: inspect-candidate-image
+      params:
+        - name: SNAPSHOT
+          value: $(params.SNAPSHOT)
+      taskSpec:
+        params:
+          - name: SNAPSHOT
+        results:
+          - name: TEST_OUTPUT
+            description: Standardized candidate image test result
+        steps:
+          - name: inspect
+            image: quay.io/konflux-ci/konflux-test:stable
+            env:
+              - name: SNAPSHOT
+                value: $(params.SNAPSHOT)
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+
+              image=$(jq -r '.components[0].containerImage' <<< "${SNAPSHOT}")
+              skopeo inspect "docker://${image}" >/dev/null
+
+              jq -cn \
+                --arg timestamp "$(date -u --iso-8601=seconds)" \
+                --arg note "Candidate image is pullable: ${image}" \
+                '{result:"SUCCESS", timestamp:$timestamp, failures:0, successes:1, warnings:0, note:$note}' \
+                | tee "$(results.TEST_OUTPUT.path)"
+
+    - name: run-unit-tests
+      runAfter:
+        - inspect-candidate-image
+      params:
+        - name: SNAPSHOT
+          value: $(params.SNAPSHOT)
+      taskSpec:
+        params:
+          - name: SNAPSHOT
+        results:
+          - name: TEST_OUTPUT
+            description: Standardized unit test result
+        steps:
+          - name: test
+            image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+            env:
+              - name: SNAPSHOT
+                value: $(params.SNAPSHOT)
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+
+              apt-get update
+              apt-get install --yes --no-install-recommends git jq make
+
+              source_url=$(jq -r '.components[0].source.git.url' <<< "${SNAPSHOT}")
+              revision=$(jq -r '.components[0].source.git.revision' <<< "${SNAPSHOT}")
+
+              cd /tmp
+              rm -rf nemo-guardrails
+              git clone --no-checkout "${source_url}" nemo-guardrails
+              cd nemo-guardrails
+              git checkout --detach "${revision}"
+
+              uv lock --check
+              uv sync --locked --group dev
+              make test WORKERS=1
+
+              jq -cn \
+                --arg timestamp "$(date -u --iso-8601=seconds)" \
+                '{result:"SUCCESS", timestamp:$timestamp, failures:0, successes:1, warnings:0}' \
+                | tee "$(results.TEST_OUTPUT.path)"
