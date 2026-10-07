@@ -22,6 +22,9 @@ from nemoguardrails import RailsConfig
 from nemoguardrails.actions.actions import ActionResult, action
 from tests.utils import TestChat
 
+# Remove once https://github.com/pnuckowski/aioresponses/pull/288 is released.
+SKIP_AIORESPONSES = "aioresponses 0.7.9 incompatible with aiohttp >=3.14 (missing stream_writer kwarg)"
+
 CONFIGS_FOLDER = os.path.join(os.path.dirname(__file__), ".", "test_configs")
 
 
@@ -36,6 +39,7 @@ async def retrieve_relevant_chunks():
     )
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_fiddler_safety_rails(monkeypatch):
     # Mock environment variables
@@ -71,6 +75,7 @@ async def test_fiddler_safety_rails(monkeypatch):
         await chat.bot_async("I'm sorry, I can't respond to that.")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_fiddler_safety_rails_pass(monkeypatch):
     # Mock environment variables
@@ -108,6 +113,7 @@ async def test_fiddler_safety_rails_pass(monkeypatch):
         await chat.bot_async("Yes, shipping can be done in 2 days.")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_fiddler_thresholds(monkeypatch):
     # Mock environment variables
@@ -144,6 +150,7 @@ async def test_fiddler_thresholds(monkeypatch):
         await chat.bot_async("I'm sorry, I can't respond to that.")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_fiddler_faithfulness_rails(monkeypatch):
     # Mock environment variables
@@ -168,6 +175,7 @@ async def test_fiddler_faithfulness_rails(monkeypatch):
         await chat.bot_async("I'm sorry, I can't respond to that.")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_fiddler_faithfulness_rails_pass(monkeypatch):
     # Mock environment variables

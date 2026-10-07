@@ -24,6 +24,9 @@ from nemoguardrails.library.patronusai.actions import (
 )
 from tests.utils import TestChat
 
+# Remove once https://github.com/pnuckowski/aioresponses/pull/288 is released.
+SKIP_AIORESPONSES = "aioresponses 0.7.9 incompatible with aiohttp >=3.14 (missing stream_writer kwarg)"
+
 PATRONUS_EVALUATE_API_URL = "https://api.patronus.ai/v1/evaluate"
 COLANG_CONFIG = """
 define user express greeting
@@ -54,6 +57,7 @@ def retrieve_relevant_chunks():
     )
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 def test_patronus_evaluate_api_success_strategy_all_pass(monkeypatch):
     """
@@ -119,6 +123,7 @@ def test_patronus_evaluate_api_success_strategy_all_pass(monkeypatch):
         chat << "Hi there! How are you doing?"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 def test_patronus_evaluate_api_success_strategy_all_pass_fails_when_one_failure(
     monkeypatch,
@@ -186,6 +191,7 @@ def test_patronus_evaluate_api_success_strategy_all_pass_fails_when_one_failure(
         chat << "I don't know the answer to that."
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_patronus_evaluate_api_success_strategy_any_pass_passes_when_one_failure(
     monkeypatch,
 ):
@@ -252,6 +258,7 @@ def test_patronus_evaluate_api_success_strategy_any_pass_passes_when_one_failure
         chat << "Hi there! How are you doing?"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_patronus_evaluate_api_success_strategy_any_pass_fails_when_all_fail(
     monkeypatch,
 ):
@@ -500,6 +507,7 @@ def test_patronus_evaluate_api_internal_error_when_evaluator_dict_does_not_have_
         chat << "I'm sorry, an internal error has occurred."
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 def test_patronus_evaluate_api_default_success_strategy_is_all_pass_happy_case(
     monkeypatch,
@@ -567,6 +575,7 @@ def test_patronus_evaluate_api_default_success_strategy_is_all_pass_happy_case(
         chat << "Hi there! How are you doing?"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 def test_patronus_evaluate_api_default_success_strategy_all_pass_fails_when_one_failure(
     monkeypatch,
@@ -682,6 +691,7 @@ def test_patronus_evaluate_api_internal_error_when_400_status_code(
         chat << "I'm sorry, an internal error has occurred."
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 def test_patronus_evaluate_api_default_response_when_500_status_code(
     monkeypatch,
@@ -790,6 +800,7 @@ def test_check_guardrail_pass_malformed_evaluation_results():
     assert check_guardrail_pass(response, "all_pass") is False
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_patronus_evaluate_request_success(monkeypatch):
     """Test successful API request to Patronus Evaluate endpoint"""
@@ -826,6 +837,7 @@ async def test_patronus_evaluate_request_success(monkeypatch):
         assert response["results"][0]["evaluation_result"]["pass"] is True
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_patronus_evaluate_request_400_error(monkeypatch):
     """Test that ValueError is raised with correct message for 400 status code"""
@@ -848,6 +860,7 @@ async def test_patronus_evaluate_request_400_error(monkeypatch):
         assert "The Patronus Evaluate API call failed with status code 400." in str(exc_info.value)
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_patronus_evaluate_request_500_error(monkeypatch):
     """Test that None is returned for 500 status code and no ValueError is raised"""

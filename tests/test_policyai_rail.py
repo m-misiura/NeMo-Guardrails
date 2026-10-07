@@ -20,7 +20,11 @@ from nemoguardrails import RailsConfig
 from nemoguardrails.library.policyai.actions import call_policyai_api
 from tests.utils import TestChat
 
+# Remove once https://github.com/pnuckowski/aioresponses/pull/288 is released.
+SKIP_AIORESPONSES = "aioresponses 0.7.9 incompatible with aiohttp >=3.14 (missing stream_writer kwarg)"
 
+
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_input_safe(monkeypatch):
     """Test that safe input is allowed through."""
     monkeypatch.setenv("POLICYAI_API_KEY", "test-api-key")
@@ -78,6 +82,7 @@ def test_input_safe(monkeypatch):
         chat << "Hello! How can I assist you today?"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_input_unsafe(monkeypatch):
     """Test that unsafe input is blocked."""
     monkeypatch.setenv("POLICYAI_API_KEY", "test-api-key")
@@ -135,6 +140,7 @@ def test_input_unsafe(monkeypatch):
         chat << "I'm sorry, I can't respond to that."
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_output_safe(monkeypatch):
     """Test that safe output is allowed through."""
     monkeypatch.setenv("POLICYAI_API_KEY", "test-api-key")
@@ -181,6 +187,7 @@ def test_output_safe(monkeypatch):
         chat << "Hello! How can I help you today?"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_output_unsafe(monkeypatch):
     """Test that unsafe output is blocked."""
     monkeypatch.setenv("POLICYAI_API_KEY", "test-api-key")
@@ -227,6 +234,7 @@ def test_output_unsafe(monkeypatch):
         chat << "I'm sorry, I can't respond to that."
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_custom_tag_via_env(monkeypatch):
     """Test using a custom policy tag via environment variable."""
     monkeypatch.setenv("POLICYAI_API_KEY", "test-api-key")
@@ -284,6 +292,7 @@ def test_custom_tag_via_env(monkeypatch):
         chat << "Hello! How can I assist you today?"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_multiple_policies(monkeypatch):
     """Test when multiple policies are evaluated (tag has multiple policies)."""
     monkeypatch.setenv("POLICYAI_API_KEY", "test-api-key")
@@ -338,6 +347,7 @@ def test_multiple_policies(monkeypatch):
         chat << "I'm sorry, I can't respond to that."
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_empty_data_array_raises_error(monkeypatch):
     """Test that empty data array (no policies attached to tag) raises an error."""
@@ -358,6 +368,7 @@ async def test_empty_data_array_raises_error(monkeypatch):
         assert "empty-tag" in str(exc_info.value)
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_api_error_raises_exception(monkeypatch):
     """Test that API errors (non-200 status) raise an exception."""
@@ -378,6 +389,7 @@ async def test_api_error_raises_exception(monkeypatch):
         assert "500" in str(exc_info.value)
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_all_policies_failed_raises_error(monkeypatch):
     """Test that all policies failing raises an error."""
@@ -421,6 +433,7 @@ async def test_missing_api_key_raises_error(monkeypatch):
     assert "POLICYAI_API_KEY" in str(exc_info.value)
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_empty_text_parameter(monkeypatch):
     """Test handling of empty text parameter."""
@@ -449,6 +462,7 @@ async def test_empty_text_parameter(monkeypatch):
         assert result["assessment"] == "SAFE"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_none_text_parameter(monkeypatch):
     """Test handling of None text parameter."""
@@ -477,6 +491,7 @@ async def test_none_text_parameter(monkeypatch):
         assert result["assessment"] == "SAFE"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_partial_policy_failures(monkeypatch):
     """Test that partial policy failures still work if some succeed."""
@@ -508,6 +523,7 @@ async def test_partial_policy_failures(monkeypatch):
         assert result["assessment"] == "SAFE"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_custom_base_url_with_trailing_slash(monkeypatch):
     """Test that custom base URL with trailing slash is handled correctly."""
@@ -536,6 +552,7 @@ async def test_custom_base_url_with_trailing_slash(monkeypatch):
         assert result["assessment"] == "SAFE"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_tag_name_parameter_overrides_env(monkeypatch):
     """Test that tag_name parameter overrides environment variable."""
@@ -563,6 +580,7 @@ async def test_tag_name_parameter_overrides_env(monkeypatch):
         assert result["assessment"] == "SAFE"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_unsafe_with_missing_fields(monkeypatch):
     """Test UNSAFE response with missing optional fields uses defaults."""
@@ -614,6 +632,7 @@ def test_mapping_function_missing_assessment():
     assert result is False
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_default_tag_name_prod(monkeypatch):
     """Test that default tag 'prod' is used when env var is not set."""

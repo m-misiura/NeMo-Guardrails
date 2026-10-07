@@ -13,12 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
 from aioresponses import aioresponses
 
 from nemoguardrails import RailsConfig
 from tests.utils import TestChat
 
+# Remove once https://github.com/pnuckowski/aioresponses/pull/288 is released.
+SKIP_AIORESPONSES = "aioresponses 0.7.9 incompatible with aiohttp >=3.14 (missing stream_writer kwarg)"
 
+
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_input(monkeypatch):
     monkeypatch.setenv("ACTIVEFENCE_API_KEY", "xxx")
 
@@ -90,6 +95,7 @@ def test_input(monkeypatch):
         chat << "I'm sorry, I can't respond to that."
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 def test_output(monkeypatch):
     monkeypatch.setenv("ACTIVEFENCE_API_KEY", "xxx")
 

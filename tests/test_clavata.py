@@ -29,6 +29,9 @@ from nemoguardrails.library.clavata.request import (
 )
 from tests.utils import TestChat
 
+# Remove once https://github.com/pnuckowski/aioresponses/pull/288 is released.
+SKIP_AIORESPONSES = "aioresponses 0.7.9 incompatible with aiohttp >=3.14 (missing stream_writer kwarg)"
+
 
 @action(is_system_action=True)
 def retrieve_relevant_chunks():
@@ -85,6 +88,7 @@ def test_clavata_no_active_policy_check(monkeypatch):
     chat << "Hello there!"
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_clavata_input_policy_check(monkeypatch):
@@ -134,6 +138,7 @@ async def test_clavata_input_policy_check(monkeypatch):
         await chat.bot_async("I cannot respond to that request.")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_clavata_label_match_logic_any(monkeypatch):
@@ -189,6 +194,7 @@ async def test_clavata_label_match_logic_any(monkeypatch):
         await chat.bot_async("I cannot respond to that request.")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_clavata_label_match_logic_any_no_match(monkeypatch):
@@ -242,6 +248,7 @@ async def test_clavata_label_match_logic_any_no_match(monkeypatch):
         await chat.bot_async("Hello there!")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_clavata_label_match_logic_all(monkeypatch):
@@ -301,6 +308,7 @@ async def test_clavata_label_match_logic_all(monkeypatch):
         await chat.bot_async("I cannot respond to that request.")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_clavata_label_match_logic_all_partial_match(monkeypatch):
@@ -355,6 +363,7 @@ async def test_clavata_label_match_logic_all_partial_match(monkeypatch):
         await chat.bot_async("Hello there!")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_clavata_empty_labels(monkeypatch):
@@ -403,6 +412,7 @@ async def test_clavata_empty_labels(monkeypatch):
         await chat.bot_async("I cannot respond to that request.")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_clavata_policy_no_match(monkeypatch):

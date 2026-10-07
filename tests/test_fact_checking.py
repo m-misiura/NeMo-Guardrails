@@ -22,6 +22,9 @@ from nemoguardrails import RailsConfig
 from nemoguardrails.actions.actions import ActionResult, action
 from tests.utils import TestChat
 
+# Remove once https://github.com/pnuckowski/aioresponses/pull/288 is released.
+SKIP_AIORESPONSES = "aioresponses 0.7.9 incompatible with aiohttp >=3.14 (missing stream_writer kwarg)"
+
 CONFIGS_FOLDER = os.path.join(os.path.dirname(__file__), ".", "test_configs")
 
 
@@ -56,6 +59,7 @@ async def test_fact_checking_greeting(httpx_mock):
     await chat.bot_async("Hi! How can I assist today?")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_fact_checking_correct(httpx_mock):
     # Test 2 - Factual statement - high alignscore
@@ -84,6 +88,7 @@ async def test_fact_checking_correct(httpx_mock):
         )
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_fact_checking_wrong(httpx_mock):
     # Test 3 - Very low alignscore - Not factual
@@ -109,6 +114,7 @@ async def test_fact_checking_wrong(httpx_mock):
         await chat.bot_async("I don't know the answer to that.")
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_fact_checking_fallback_to_self_check_correct(httpx_mock):
     # Test 4 - Factual statement - AlignScore endpoint not set up properly, use ask llm for fact-checking
@@ -137,6 +143,7 @@ async def test_fact_checking_fallback_to_self_check_correct(httpx_mock):
         )
 
 
+@pytest.mark.skip(reason=SKIP_AIORESPONSES)
 @pytest.mark.asyncio
 async def test_fact_checking_fallback_self_check_wrong(httpx_mock):
     # Test 5 - Factual statement - AlignScore endpoint not set up properly, use ask llm for fact-checking
