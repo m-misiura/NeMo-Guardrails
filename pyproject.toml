@@ -167,6 +167,12 @@ all = [
   "fast-langdetect",
 ]
 
+[tool.poetry.group.security]
+optional = true
+
+[tool.poetry.group.security.dependencies]
+langgraph-sdk = ">=0.4.4,<0.5.0"
+
 [tool.poetry.group.dev]
 optional = true
 
