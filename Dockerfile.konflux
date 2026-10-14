@@ -4,14 +4,14 @@ ARG MODELCAR_MINILM=registry.redhat.io/rhai/modelcar-redhatai-all-minilm-l6-v2:3
 ARG MODELCAR_SNOWFLAKE=registry.redhat.io/rhai/modelcar-redhatai-snowflake-arctic-embed-m-long:3.0
 ARG MODELCAR_SPACY=registry.redhat.io/rhai/modelcar-redhatai-en-core-web-lg:3.0
 ARG MODELCAR_NLTK=registry.redhat.io/rhai/modelcar-redhatai-nltk-punkt-tab:3.0
-ARG MODELCAR_DEBERTA=registry.redhat.io/rhai/modelcar-redhatai-deberta-v3-base-prompt-injection-v2:3.0
+ARG MODELCAR_WOLF_DEFENDER=registry.redhat.io/rhai/modelcar-redhatai-wolf-defender-prompt-injection:3.0
 ARG MODELCAR_HAP=registry.redhat.io/rhai/modelcar-redhatai-granite-guardian-hap-125m:3.0
 
 FROM ${MODELCAR_MINILM} AS modelcar-minilm
 FROM ${MODELCAR_SNOWFLAKE} AS modelcar-snowflake
 FROM ${MODELCAR_SPACY} AS modelcar-spacy
 FROM ${MODELCAR_NLTK} AS modelcar-nltk
-FROM ${MODELCAR_DEBERTA} AS modelcar-deberta
+FROM ${MODELCAR_WOLF_DEFENDER} AS modelcar-wolf-defender
 FROM ${MODELCAR_HAP} AS modelcar-hap
 
 FROM ${BASE} as build
@@ -42,7 +42,7 @@ COPY --from=modelcar-minilm /models /tmp/modelcars/minilm
 COPY --from=modelcar-snowflake /models /tmp/modelcars/snowflake
 COPY --from=modelcar-spacy /models/en_core_web_lg-any-py3-none-any.whl /tmp/modelcars/
 COPY --from=modelcar-nltk /models /tmp/modelcars/nltk
-COPY --from=modelcar-deberta /models /tmp/modelcars/deberta
+COPY --from=modelcar-wolf-defender /models /tmp/modelcars/wolf-defender
 COPY --from=modelcar-hap /models /tmp/modelcars/hap
 
 # uv is build tooling inherited from the base image, not a runtime dependency.
