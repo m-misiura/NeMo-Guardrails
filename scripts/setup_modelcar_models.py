@@ -138,8 +138,8 @@ def main() -> None:
     )
 
     install_hf_model(
-        MODELCAR_DIR / "deberta",
-        "RedHatAI/deberta-v3-base-prompt-injection-v2",
+        MODELCAR_DIR / "wolf-defender",
+        "RedHatAI/wolf-defender-prompt-injection",
         os.environ["HF_HOME"],
         use_hub=True,
     )
