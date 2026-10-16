@@ -19,6 +19,8 @@
 Each modelcar's /models/ tree is staged at MODELCAR_DIR/{name}/ by
 COPY --from instructions in the Dockerfile.  This script creates the
 refs/main -> snapshot directory mapping that HF libraries expect.
+Bundled classifiers also get stable paths under /app/models so default
+guardrail configurations do not need to name the underlying model repository.
 
 Adding a new model:
   1. Add a COPY --from=modelcar-xxx line in the Dockerfile
@@ -32,6 +34,7 @@ import sys
 from pathlib import Path
 
 MODELCAR_DIR = Path(os.environ.get("MODELCAR_DIR", "/tmp/modelcars"))
+BUNDLED_MODELS_DIR = Path("/app/models")
 SNAPSHOT_ID = "modelcar"
 
 PRUNE_FILES = [
@@ -79,7 +82,14 @@ def prune_modelcar(src: Path) -> None:
     print(f"Pruned {src}: {before}MB -> {after}MB")
 
 
-def install_hf_model(src_dir: Path, model_id: str, cache_base: str, *, use_hub: bool = False) -> None:
+def install_hf_model(
+    src_dir: Path,
+    model_id: str,
+    cache_base: str,
+    *,
+    use_hub: bool = False,
+    alias: Path | None = None,
+) -> None:
     if not src_dir.is_dir():
         sys.exit(f"FATAL: source {src_dir} not found")
 
@@ -94,6 +104,11 @@ def install_hf_model(src_dir: Path, model_id: str, cache_base: str, *, use_hub: 
     (model_dir / "refs" / "main").write_text(SNAPSHOT_ID)
 
     shutil.copytree(src_dir, snapshot_dir, dirs_exist_ok=True)
+    if alias is not None:
+        alias.parent.mkdir(parents=True, exist_ok=True)
+        if alias.is_symlink():
+            alias.unlink()
+        alias.symlink_to(os.path.relpath(snapshot_dir.resolve(), alias.parent.resolve()), target_is_directory=True)
     print(f"Installed {model_id} -> {cache_root}")
 
 
@@ -142,12 +157,14 @@ def main() -> None:
         "RedHatAI/wolf-defender-prompt-injection",
         os.environ["HF_HOME"],
         use_hub=True,
+        alias=BUNDLED_MODELS_DIR / "prompt-injection",
     )
     install_hf_model(
         MODELCAR_DIR / "hap",
         "RedHatAI/granite-guardian-hap-125m",
         os.environ["HF_HOME"],
         use_hub=True,
+        alias=BUNDLED_MODELS_DIR / "hap",
     )
 
     install_nltk_data(MODELCAR_DIR / "nltk")
