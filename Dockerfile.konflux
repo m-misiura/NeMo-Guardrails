@@ -1,4 +1,4 @@
-ARG BASE="quay.io/aipcc/base-images/cpu-el9.8:3.6.0-ea.2-1788562451@sha256:5dbe6a3e14877ef9fbda55e6cef66430a244c6a5c73a9a72bfef5b3af31e44c5"
+ARG BASE="quay.io/aipcc/base-images/cpu-el9.8:3.6.0-1789756226@sha256:a22dace102a38678e7253e3affb35bce61cfa8db1bad6c271f0fcde2adc1da7b"
 
 ARG MODELCAR_MINILM=registry.redhat.io/rhai/modelcar-redhatai-all-minilm-l6-v2:3.0
 ARG MODELCAR_SNOWFLAKE=registry.redhat.io/rhai/modelcar-redhatai-snowflake-arctic-embed-m-long:3.0
