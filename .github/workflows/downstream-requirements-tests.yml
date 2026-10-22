@@ -75,8 +75,9 @@ jobs:
           while IFS='=' read -r package _; do
             runtime_exclusions+=(--no-emit-package "$package")
           done < "$RUNNER_TEMP/downstream-runtime-constraints.txt"
+          # The downstream runtime omits the Chainlit UI and its telemetry dependencies.
           env -u UV_CONFIG_FILE uv export --locked --only-group test --only-group test_integration \
-            --no-emit-project "${runtime_exclusions[@]}" \
+            --prune chainlit --no-emit-project "${runtime_exclusions[@]}" \
             --output-file "$RUNNER_TEMP/downstream-test-requirements.txt" > /dev/null
 
       - name: Install locked test dependencies and package
