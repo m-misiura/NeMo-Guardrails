@@ -220,7 +220,7 @@ nest-asyncio==1.6.0
     # via nemoguardrails (pyproject.toml)
 networkx==3.5
     # via torch
-nltk==3.10.3
+nltk==3.10.4
     # via nemoguardrails (pyproject.toml)
 numpy==2.3.3
     # via
