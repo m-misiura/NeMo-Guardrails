@@ -361,6 +361,7 @@ numpy==2.4.6 \
     #   presidio-analyzer
     #   scikit-learn
     #   scipy
+    #   sentence-transformers
     #   spacy
     #   thinc
     #   transformers
@@ -659,8 +660,8 @@ scipy==1.18.0 \
     #   scikit-learn
     #   sentence-transformers
     # from https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.6/cpu-ubi9/simple/
-sentence-transformers==5.2.0 \
-    --hash=sha256:269f36e07b772a93a96fa0de7d97b454926d8ece6729f4aff2d8ed70ca16c6f6
+sentence-transformers==5.6.0 \
+    --hash=sha256:91736d851a3c0b34bd6959b4110c5c43a8d75e3d5fc13602605f7f83ea9dd643
     # via nemoguardrails (pyproject.toml)
     # from https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.6/cpu-ubi9/simple/
 setuptools==81.0.0 \
