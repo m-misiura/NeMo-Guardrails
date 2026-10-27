@@ -82,7 +82,7 @@ from nemoguardrails.llm.taskmanager import LLMTaskManager
 from nemoguardrails.logging.explain import LLMCallInfo
 from nemoguardrails.manifests import RailDirection as SurfaceDirection
 from nemoguardrails.patch_asyncio import check_sync_call_from_async_loop
-from nemoguardrails.rails.llm.buffer import get_buffer_strategy
+from nemoguardrails.rails.llm.buffer import ChunkBatch, get_buffer_strategy
 from nemoguardrails.rails.llm.config import RailsConfig, _get_flow_name
 from nemoguardrails.rails.llm.options import (
     ActivatedRail,
@@ -162,6 +162,20 @@ def _serialize_tool_calls(tool_calls: list[ToolCall]) -> list[dict]:
         }
         for tool_call in tool_calls
     ]
+
+
+async def _buffer_complete_response(stream: AsyncIterator[Union[str, dict]]) -> AsyncIterator[ChunkBatch]:
+    """Do not release entity fragments before an output mask can inspect the whole response."""
+    parts: list[str] = []
+    async for chunk in stream:
+        if _is_stream_error_chunk(chunk):
+            error = chunk["text"] if isinstance(chunk, dict) else chunk
+            yield ChunkBatch([error], [error])
+            return
+        parts.append(chunk["text"] if isinstance(chunk, dict) else chunk)
+    if parts:
+        # Retain original frames so assembled model JSON cannot become a transport error.
+        yield ChunkBatch(parts, parts)
 
 
 def _stream_chunk_metadata(chunk: LLMResponseChunk) -> Optional[dict]:
@@ -1454,8 +1468,9 @@ class IORails(BaseGuardrails):
         Returns an async iterator that yields string chunks (or dicts when
         ``include_metadata=True``).  Input rails run before any tokens are
         streamed.  If output rails are configured and streaming is enabled,
-        tokens are buffered and checked using the same ``RollingBuffer`` /
-        ``stream_first`` semantics as LLMRails.
+        check-only rails use ``RollingBuffer`` / ``stream_first`` semantics.
+        Active output transformations buffer the complete response before checking
+        and emitting it, so entities cannot escape between processing batches.
 
         Args:
             messages: Conversation messages in OpenAI format.
@@ -1777,7 +1792,7 @@ class IORails(BaseGuardrails):
         enabled: Union[bool, list[str]] = True,
         include_metadata: Optional[bool] = False,
     ) -> AsyncGenerator[Union[str, dict], None]:
-        """Buffer streamed chunks and run output rails on each batch.
+        """Buffer output transforms to completion; otherwise check each streamed batch.
 
         Uses the same ``RollingBuffer`` and ``stream_first`` semantics as
         LLMRails:
@@ -1795,8 +1810,12 @@ class IORails(BaseGuardrails):
         output_streaming_config = self.config.rails.output.streaming
         stream_first = output_streaming_config.stream_first
         buffer_strategy = get_buffer_strategy(output_streaming_config)
+        complete_response = self.rails_manager.has_output_rewrites(enabled=enabled)
+        batches = (
+            _buffer_complete_response(streaming_handler) if complete_response else buffer_strategy(streaming_handler)
+        )
 
-        async for chunk_batch in buffer_strategy(streaming_handler):
+        async for chunk_batch in batches:
             user_output_chunks = chunk_batch.user_output_chunks
             bot_response_chunk = buffer_strategy.format_chunks(chunk_batch.processing_context)
 
@@ -1849,8 +1868,11 @@ class IORails(BaseGuardrails):
 
             if not stream_first:
                 if rewritten is None:
-                    for chunk in user_output_chunks:
-                        yield chunk
+                    if complete_response:
+                        yield _frame_for_stream(bot_response_chunk, include_metadata)
+                    else:
+                        for chunk in user_output_chunks:
+                            yield chunk
                 else:
                     # One frame: with ``context_size`` at zero the judged window is this batch.
                     log.info("[%s] Output rails rewrote the streamed batch", req_id)

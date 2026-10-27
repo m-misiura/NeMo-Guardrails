@@ -9,6 +9,40 @@ content:
 ---
 
 Configure how output rails process streamed tokens under `rails.output.streaming`.
+The chunked behavior below applies to IORails configurations with detection and checking rails only.
+Active output masking in IORails uses complete-response buffering as described in the next section.
+
+## IORails Output Masking
+
+When an enabled output rail masks or otherwise transforms text, IORails buffers the complete model response before running output rails.
+It runs transformations sequentially, then runs the remaining checks against the transformed text, concurrently if `rails.output.parallel` is `True`.
+The caller receives the permitted text once, after generation and validation finish.
+On a generation error, cancellation, or blocking verdict, buffered response text is not emitted.
+
+Use these settings with a configured output masking rail:
+
+```yaml
+rails:
+  output:
+    parallel: True
+    flows:
+      - mask sensitive data on output
+    streaming:
+      enabled: True
+      stream_first: False
+      context_size: 0
+```
+
+This example assumes the selected masking rail's dependencies and entity configuration are already installed and configured.
+The existing configuration validation requires `stream_first: False` and `context_size: 0` for output transformations.
+`chunk_size` does not split the response when an output transformation is active.
+Input-only masking does not enable this buffering, and disabling output transformations for a request restores the ordinary chunked path.
+
+<Note>
+The streaming API remains available, but the caller waits for the complete response rather than receiving progressive text.
+Buffering prevents an entity from escaping solely because its fragments fall in different processing batches; it does not guarantee that the detector recognizes every sensitive entity.
+Configure a finite output limit on the generation model to bound response size and buffering cost.
+</Note>
 
 ## Configuration
 
