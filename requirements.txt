@@ -82,7 +82,7 @@ fast-langdetect==1.0.0
     # via nemoguardrails (pyproject.toml)
 fastapi==0.136.3
     # via nemoguardrails (pyproject.toml)
-fastembed==0.8.0
+fastembed==0.9.1
     # via nemoguardrails (pyproject.toml)
 fasttext-predict==0.9.2.4
     # via fast-langdetect
@@ -319,8 +319,10 @@ pandas==2.3.1
     # via nemoguardrails (pyproject.toml)
 phonenumbers==9.0.10
     # via presidio-analyzer
-pillow==11.3.0
-    # via fastembed
+pillow==13.0.0
+    # via
+    #   -c dependencies/cve-constraints.txt
+    #   fastembed
 preshed==3.0.10
     # via
     #   spacy

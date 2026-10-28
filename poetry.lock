@@ -1319,39 +1319,39 @@ standard-no-fastapi-cloud-cli = ["email-validator (>=2.0.0)", "fastapi-cli[stand
 
 [[package]]
 name = "fastembed"
-version = "0.8.0"
+version = "0.9.1"
 description = "Fast, light, accurate library built for retrieval embedding generation"
 optional = false
 python-versions = ">=3.10.0"
 groups = ["main"]
 files = [
-    {file = "fastembed-0.8.0-py3-none-any.whl", hash = "sha256:40bee672657574a1009e35ec50030a55f2b426842cb011845379817641bbbbd0"},
-    {file = "fastembed-0.8.0.tar.gz", hash = "sha256:75966edfa8b006ee78514c726bd7f6a50721dadc89305279052be9db72fd53e8"},
+    {file = "fastembed-0.9.1-py3-none-any.whl", hash = "sha256:95042ac7f685bda6697861066d49f8b119fbde8b75ed5162bbb7e84e2dad0e1d"},
+    {file = "fastembed-0.9.1.tar.gz", hash = "sha256:8b4b2881ea85a4d36e8f284466671437b3fed869c33cdc71d6f6c48ddff115c7"},
 ]
 
 [package.dependencies]
 huggingface-hub = ">=0.20,<2.0"
-loguru = ">=0.7.2,<0.8.0"
+loguru = ">=0.7.2,<0.8"
 mmh3 = ">=4.1.0,<6.0.0"
 numpy = [
-    {version = ">=1.21,<2.3.0", markers = "python_version == \"3.10\""},
-    {version = ">=1.21", markers = "python_version == \"3.11\""},
-    {version = ">=1.26", markers = "python_version == \"3.12\""},
-    {version = ">=2.1.0", markers = "python_version == \"3.13\""},
+    {version = ">=1.21,<2.3.0", markers = "python_full_version == \"3.10.*\""},
+    {version = ">=1.21", markers = "python_full_version == \"3.11.*\""},
+    {version = ">=1.26", markers = "python_full_version == \"3.12.*\""},
+    {version = ">=2.1.0", markers = "python_full_version == \"3.13.*\""},
 ]
 onnxruntime = [
-    {version = ">=1.17.0,<1.20.0 || >1.20.0,<1.24", markers = "python_version == \"3.10\""},
-    {version = ">1.21.0,<1.24.0 || >1.24.0,<1.24.1 || >1.24.1", markers = "python_version == \"3.13\""},
-    {version = ">=1.17.0,<1.20.0 || >1.20.0,<1.24.0 || >1.24.0,<1.24.1 || >1.24.1", markers = "python_version >= \"3.11\" and python_version < \"3.13\""},
+    {version = ">=1.17.0,<1.20.0 || >1.20.0,<1.24", markers = "python_full_version == \"3.10.*\""},
+    {version = ">1.21.0,<1.24.0 || >1.24.0,<1.24.1 || >1.24.1", markers = "python_full_version == \"3.13.*\""},
+    {version = ">=1.17.0,<1.20.0 || >1.20.0,<1.24.0 || >1.24.0,<1.24.1 || >1.24.1", markers = "python_full_version >= \"3.11.0\" and python_full_version < \"3.13.0\""},
 ]
 pillow = [
-    {version = ">=11.0.0,<13.0", markers = "python_version == \"3.13\""},
-    {version = ">=10.3.0,<13.0", markers = "python_version >= \"3.10\" and python_version < \"3.13\""},
+    {version = ">=11.0.0,<14.0", markers = "python_full_version == \"3.13.*\""},
+    {version = ">=10.3.0,<14.0", markers = "python_full_version >= \"3.10.0\" and python_full_version < \"3.13.0\""},
 ]
-py-rust-stemmers = ">=0.1.0,<0.2.0"
-requests = ">=2.31,<3.0"
+py-rust-stemmers = ">=0.1.0,<0.2"
+requests = ">=2.31,<3"
 tokenizers = ">=0.15,<1.0"
-tqdm = ">=4.66,<5.0"
+tqdm = ">=4.66,<5"
 
 [[package]]
 name = "fasttext-predict"
@@ -8465,4 +8465,4 @@ tracing = ["aiofiles", "opentelemetry-api"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.14"
-content-hash = "90efbd9dc1a9948e659296aa44f24d225b711c837c33b179ddf4ca1f1d15455d"
+content-hash = "1b50b42e745f7a70b07a7aca4153b2691f6f6f76e1c52eead1fd66791799af5c"
