@@ -153,8 +153,8 @@ fastapi==0.139.2 \
     --hash=sha256:b17a1b3f5881e5b49894d21d9e95d3e8a6d11f8ecb40378fc4d0942e645a6d82
     # via nemoguardrails (pyproject.toml)
     # from https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.5/cpu-ubi9/simple/
-fastembed==0.8.0 \
-    --hash=sha256:ff9a7c1fd3317744f64372b3169e206dc6d3d5ffe5c8438988fed65f2e9ce61a
+fastembed==0.9.1 \
+    --hash=sha256:670d7636e2e606e1714a7ab9a36b5c6f2a4474df3f47c20765787eda30cdc4b3
     # via nemoguardrails (pyproject.toml)
     # from https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.5/cpu-ubi9/simple/
 fasttext-predict==0.9.2.4 \
@@ -481,16 +481,14 @@ phonenumbers==9.0.34 ; python_full_version < '3.13' \
     --hash=sha256:b7e92cfd3baf0039ab8552674db7423f82b4818bba97c932a1a99094ea2b12d5
     # via presidio-analyzer
     # from https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.5/cpu-ubi9/simple/
-pillow==12.3.0 ; python_full_version < '3.13' \
-    --hash=sha256:292ad662c4a21daa5c557816bd36870c036fcb32f1863a474725c9a48db317f2 \
-    --hash=sha256:4a904ef7f3765fc818c3a483529ff04147e97cc0390f9eec5edd30cae497fafe \
-    --hash=sha256:5762ef56cdceff2319ac80ed92150106a0bf51ec2eea15226f44c9d983e7b916 \
-    --hash=sha256:65a30ac6a91ac6d2d08c73441c8fe69653d0d818312b18d1dc86ee8932529cec \
-    --hash=sha256:787b6ebb6a267bca4040c40296487e0428b7ba8fe3024b2863626ba09d566fc9 \
-    --hash=sha256:bb4f92e67999c0820fd8a9f959f0dce3b0b0dcb8144d47aa7a1432183e7c4c98 \
-    --hash=sha256:c7d40c6deb9bf0b847d4f027d55e2362d55fbee8876dbf728af0e2efe345128a \
-    --hash=sha256:e803d1800d5fb6ed2fbbb8d1aa4a42f1f9080ed98b6f929646b920330031f6b1
-    # via fastembed
+pillow==13.0.0 ; python_full_version < '3.13' \
+    --hash=sha256:28998a83b7064f7b5418a9cbd83422007e36382424080d2d0d399c217fa77b0e \
+    --hash=sha256:2ee1aa6abaa9a76617aaabb5c9d2ad6cdb85ddb3b524a3d172cb86b08ffcf4c3 \
+    --hash=sha256:3f20989af8bc95245f8c138304d85f350ab191da661b9b42dc3ef8988833d059 \
+    --hash=sha256:823c9b5f18f00efb44008dac8ac24a869d50ff0f1d62bedb0e081ba058a8a23c
+    # via
+    #   -c dependencies/cve-constraints.txt
+    #   fastembed
     # from https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.5/cpu-ubi9/simple/
 preshed==3.0.13 ; python_full_version < '3.14' \
     --hash=sha256:1011fa98d050f429acaa54ae5d08b279dba95bfe3e6d2d67d622280b7e88ed9d \
