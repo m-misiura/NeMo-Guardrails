@@ -21,7 +21,7 @@ classifiers = [
 
 
 dependencies = [
-  "aiohttp (>=3.14.3)",
+  "aiohttp (>=3.14.4)",
   "aiohttp-retry (>=2.9.0)",
   "dataclasses-json (>=0.6.7,<0.7.0)",
   "fastembed (>=0.2.2)",
