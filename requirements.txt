@@ -817,8 +817,8 @@ typing-inspection==0.4.2 \
     #   fastapi
     #   pydantic
     # from https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.5/cpu-ubi9/simple/
-urllib3==2.7.0 \
-    --hash=sha256:8c0d942cee38135eb54435268fa34bceed0d0a7dff31d8aaee06c06ef8637942
+urllib3==2.8.0 \
+    --hash=sha256:cf189e13e706ae0f5465262fe46be26aeddd638328f239825c67496621c68627
     # via
     #   -c dependencies/cve-constraints.txt
     #   requests
