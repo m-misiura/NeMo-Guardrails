@@ -6,8 +6,10 @@
 #
 --index-url https://download.pytorch.org/whl/cpu
 
-filelock==3.20.0
-    # via torch
+filelock==4.2.4
+    # via
+    #   -c dependencies/cve-constraints.txt
+    #   torch
 fsspec==2026.6.0
     # via
     #   -c dependencies/cve-constraints.txt
