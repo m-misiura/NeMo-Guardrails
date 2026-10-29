@@ -24,7 +24,7 @@ dependencies = [
   "aiohttp (>=3.14.3)",
   "aiohttp-retry (>=2.9.0)",
   "dataclasses-json (>=0.6.7,<0.7.0)",
-  "fastembed (>=0.2.2)",
+  "fastembed (>=0.9.1)",
   "onnxruntime (>=1.17.0,<1.24) ; python_version>='3.10' and python_version<'3.11'",
   "onnxruntime (>=1.17.0) ; python_version>='3.11'",
   "httpx (>=0.24.1)",
@@ -170,6 +170,9 @@ dev = [
 [tool.uv]
 package = true
 exclude-newer = "7 days"
+# Temporary: fastembed 0.9.1 (needed for pillow>=13.0.0) is newer than the cooldown.
+# Remove once it is older than 7 days (after 2026-10-31).
+exclude-newer-package = { fastembed = "2026-10-28T00:00:00Z" }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
