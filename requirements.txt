@@ -164,9 +164,10 @@ fasttext-predict==0.9.2.4 \
     --hash=sha256:e241eca74f595e4348e8e549d49d6674729f4a131ad67ff078d0afa6e371851e
     # via fast-langdetect
     # from https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.5/cpu-ubi9/simple/
-filelock==3.30.2 \
-    --hash=sha256:3876bce9fb39cd4dc9dc025336708416b2159bd96c5b4ca2d77dd14c9c7600ba
+filelock==4.2.4 \
+    --hash=sha256:3cddca5b5ab48b12258abe2ee146cb6c7bb36ccb2817ed369d358cf7088fe892
     # via
+    #   -c dependencies/cve-constraints.txt
     #   huggingface-hub
     #   tldextract
     #   torch
