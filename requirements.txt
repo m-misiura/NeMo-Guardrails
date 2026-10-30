@@ -70,9 +70,11 @@ catalogue==2.0.10 ; python_full_version < '3.14' \
     #   srsly
     #   thinc
     # from https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.5/cpu-ubi9/simple/
-certifi==2026.6.17 \
-    --hash=sha256:36a32caf926900a4f112e18621636a19ce6474c5b2aeb148588147d2633ec530
+certifi==2026.10.19 \
+    --hash=sha256:3aad93ed5a2e5467cbe9c3f8879f96949d85dc5964aed70f2ce24edcf6b833f8 \
+    --hash=sha256:a47d0355ba4428a265002bd50960230cae2b0f61cc49c93c0617f5778df1d304
     # via
+    #   -c dependencies/cve-constraints.txt
     #   httpcore
     #   httpx
     #   requests

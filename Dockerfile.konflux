@@ -1,4 +1,4 @@
-ARG BASE=registry.redhat.io/rhai/base-image-cpu-rhel9:3.5.2-1790703656@sha256:f1803aba2fd3f94265dbcf950b8a8d686407f52403a015f7999e40067e41f58a
+ARG BASE=quay.io/aipcc/base-images/cpu:3.5.5@sha256:56b86506fa8c09b60eb0b678481c8dfbf618d6b193554f47b597b42028198cfc
 FROM $BASE as build
 
 USER 0
