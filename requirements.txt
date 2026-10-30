@@ -37,8 +37,9 @@ catalogue==2.0.10
     #   spacy
     #   srsly
     #   thinc
-certifi==2025.8.3
+certifi==2026.10.23
     # via
+    #   -c dependencies/cve-constraints.txt
     #   httpcore
     #   httpx
     #   requests
@@ -323,6 +324,10 @@ pillow==13.0.0
     # via
     #   -c dependencies/cve-constraints.txt
     #   fastembed
+pip==26.2.2
+    # via
+    #   -c dependencies/cve-constraints.txt
+    #   nemoguardrails (pyproject.toml)
 preshed==3.0.10
     # via
     #   spacy
