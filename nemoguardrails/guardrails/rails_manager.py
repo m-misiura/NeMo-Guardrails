@@ -17,7 +17,6 @@
 
 import asyncio
 import logging
-import warnings
 from collections.abc import Coroutine, Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
@@ -328,14 +327,10 @@ class RailsManager:
                     flow, _SURFACE_DIRECTIONS[direction], deps, http_client=http_client
                 )
 
-        # Which rails may rewrite decides whether this config can run its rails concurrently at
-        # all, which is settled once, here. The order they run in is not: it follows from the
-        # configured flows, which stay the single source of truth for what runs.
+        # Input rewrites also determine whether speculative generation is safe.
         self.transform_flows: dict[RailDirection, tuple[str, ...]] = {
             direction: _rewriting_flows(self._rails, direction, flows) for direction, flows in configured
         }
-        if any(self.transform_flows.values()):
-            self._disable_parallel_execution()
 
         # Tool Call Actions run on tool invocations from the main LLM response
         # Tool Result Actions run on the results of executing Tool Calls in the harness
@@ -352,20 +347,6 @@ class RailsManager:
             self.input_parallel,
             self.output_parallel,
         )
-
-    def _disable_parallel_execution(self) -> None:
-        """Turn both directions sequential, because concurrent rails cannot carry a rewrite."""
-        if not (self.input_parallel or self.output_parallel):
-            return
-        rewriting = sorted(flow for flows in self.transform_flows.values() for flow in flows)
-        warnings.warn(
-            f"rails.input.parallel / rails.output.parallel are not honored alongside a rail that rewrites "
-            f"content ({', '.join(rewriting)}); input and output rails run sequentially so each rewrite "
-            f"reaches the rails behind it.",
-            stacklevel=3,
-        )
-        self.input_parallel = False
-        self.output_parallel = False
 
     def _rail_dependencies(self) -> RailDependencies:
         """Bundle the collaborators a compiled rail's action may declare as parameters."""
@@ -425,15 +406,15 @@ class RailsManager:
         The per-request *enabled* toggle selects which configured input rails run:
         ``True`` (the default) runs all, ``False`` runs none, and a list runs only the
         named flows (matched on the normalized flow name). When parallel mode is enabled,
-        all selected rails run concurrently and the first unsafe result cancels the rest.
+        transforming rails run first, then checks run concurrently on the rewritten text.
+        The first unsafe check cancels the remaining checks.
         """
         active = self._flows_to_run(RailDirection.INPUT, self.input_flows, enabled)
         if not active:
             return RailResult.allow()
 
         if self.input_parallel:
-            rails = {flow: self._run_rail(flow, RailDirection.INPUT, messages) for flow in active}
-            return await self._run_rails_parallel(rails, RailDirection.INPUT)
+            return await self._run_masks_then_parallel_checks(active, RailDirection.INPUT, messages)
         return await self._run_rails_sequential(active, RailDirection.INPUT, messages)
 
     async def is_output_safe(
@@ -444,16 +425,21 @@ class RailsManager:
         The per-request *enabled* toggle selects which configured output rails run:
         ``True`` (the default) runs all, ``False`` runs none, and a list runs only the
         named flows (matched on the normalized flow name). When parallel mode is enabled,
-        all selected rails run concurrently and the first unsafe result cancels the rest.
+        transforming rails run first, then checks run concurrently on the rewritten text.
+        The first unsafe check cancels the remaining checks.
         """
         active = self._flows_to_run(RailDirection.OUTPUT, self.output_flows, enabled)
         if not active:
             return RailResult.allow()
 
         if self.output_parallel:
-            rails = {flow: self._run_rail(flow, RailDirection.OUTPUT, messages, response) for flow in active}
-            return await self._run_rails_parallel(rails, RailDirection.OUTPUT)
+            return await self._run_masks_then_parallel_checks(active, RailDirection.OUTPUT, messages, response)
         return await self._run_rails_sequential(active, RailDirection.OUTPUT, messages, response)
+
+    def has_output_rewrites(self, *, enabled: Union[bool, list[str]] = True) -> bool:
+        """Whether the selected output rails need the complete response before emission."""
+        active = self._flows_to_run(RailDirection.OUTPUT, self.output_flows, enabled)
+        return bool(_rewriting_flows(self._rails, RailDirection.OUTPUT, active))
 
     async def are_tool_calls_safe(
         self,
@@ -638,6 +624,31 @@ class RailsManager:
                 else:
                     bot_response = final_text
         return _result_after_rewrites(direction, original_text, final_text, tuple(collected))
+
+    async def _run_masks_then_parallel_checks(
+        self,
+        flows: Sequence[str],
+        direction: RailDirection,
+        messages: list[dict],
+        bot_response: Optional[str] = None,
+    ) -> RailResult:
+        rewriting = _rewriting_flows(self._rails, direction, flows)
+        checks = [flow for flow in flows if flow not in rewriting]
+        mask_result = await self._run_rails_sequential(rewriting, direction, messages, bot_response)
+        if not mask_result.is_safe or not checks:
+            return mask_result
+
+        if mask_result.outcome.is_transform:
+            text = mask_result.outcome.transform_text[_REWRITABLE_TARGET[direction].value]
+            if direction is RailDirection.INPUT:
+                messages = rewrite_user_message(messages, text)
+            else:
+                bot_response = text
+
+        rails = {flow: self._run_rail(flow, direction, messages, bot_response) for flow in checks}
+        check_result = await self._run_rails_parallel(rails, direction)
+        result = mask_result if check_result.is_safe else check_result
+        return replace(result, records=mask_result.records + check_result.records)
 
     async def _run_tool_rails_sequential(
         self,

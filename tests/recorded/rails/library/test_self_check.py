@@ -277,7 +277,8 @@ async def test_multiple_self_check_output_rails_streaming(openai_api_key, parall
     ]
     routes = _self_check_routes(rails, start)
     if parallel:
-        assert sorted(routes) == sorted(expected_routes * 2)
+        # Zero context must not recheck the completed batch at end-of-stream.
+        assert sorted(routes) == sorted(expected_routes)
         assert normalize_stream_chunks(chunks) == snapshot(
             {
                 "content": "allowed_output_streaming_response",

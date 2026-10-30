@@ -1416,7 +1416,7 @@ def _manager_compiling(rails: dict, config: dict = NEMOGUARDS_CONFIG) -> RailsMa
 
 
 class TestSchedulingRailsThatRewrite:
-    """A configured rewriting rail decides run order and rules out concurrent execution."""
+    """Rewriting rails run first without disabling parallel checks in either direction."""
 
     def test_the_rewriting_rails_are_named_per_direction(self):
         """Each direction is asked separately, because the two are scheduled for different reasons."""
@@ -1450,20 +1450,18 @@ class TestSchedulingRailsThatRewrite:
 
         assert manager._flows_to_run(RailDirection.INPUT, manager.input_flows, True) == []
 
-    def test_parallel_rails_are_turned_off_in_both_directions(self):
-        """One rewriting rail settles how the whole config runs, rather than per section."""
-        with rails_compiled_as({CONTENT_SAFETY_OUTPUT_FLOW: declared_rewriter(SurfaceDirection.OUTPUT)}):
-            with pytest.warns(UserWarning, match="parallel"):
-                manager = _make_rails_manager(RailsConfig.from_content(config=NEMOGUARDS_PARALLEL_CONFIG))
-
-        assert manager.input_parallel is False
-        assert manager.output_parallel is False
-
-    def test_the_warning_names_the_rail_that_forced_it(self):
-        """A downgrade a user did not ask for has to say which rail caused it."""
-        with rails_compiled_as({CONTENT_SAFETY_INPUT_FLOW: declared_rewriter(SurfaceDirection.INPUT)}):
-            with pytest.warns(UserWarning, match=CONTENT_SAFETY_INPUT_FLOW.replace("$", r"\$")):
-                _make_rails_manager(RailsConfig.from_content(config=NEMOGUARDS_PARALLEL_INPUT_CONFIG))
+    @pytest.mark.parametrize(
+        "flow, direction",
+        [
+            (CONTENT_SAFETY_INPUT_FLOW, SurfaceDirection.INPUT),
+            (CONTENT_SAFETY_OUTPUT_FLOW, SurfaceDirection.OUTPUT),
+        ],
+    )
+    def test_rewriters_preserve_parallel_flags_in_both_directions(self, flow, direction, recwarn):
+        manager = _manager_compiling({flow: declared_rewriter(direction)}, NEMOGUARDS_PARALLEL_CONFIG)
+        assert manager.input_parallel is True
+        assert manager.output_parallel is True
+        assert [warning for warning in recwarn if "parallel" in str(warning.message)] == []
 
     def test_parallel_rails_are_left_alone_when_nothing_rewrites(self, recwarn):
         """The downgrade is silent and absent for every config that does not need it."""

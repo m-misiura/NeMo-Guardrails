@@ -389,8 +389,8 @@ class TestMaskingRailAheadOfJudgingOutputRails:
 
 
 @pytest.mark.asyncio
-class TestParallelIsRefusedWhenARailRewrites:
-    """A config asking for concurrent rails gets sequential ones, because a rewrite cannot compose."""
+class TestParallelChecksAfterRewrites:
+    """Masking reaches the parallel checks and the model or caller."""
 
     @pytest.mark.parametrize(
         "config_dict, direction, flows",
@@ -400,19 +400,15 @@ class TestParallelIsRefusedWhenARailRewrites:
         ],
         ids=["input", "output"],
     )
-    async def test_the_downgrade_is_announced_and_applied(self, config_dict, direction, flows):
-        """Both parallel flags go off together, and the warning names the rail that forced it."""
-        with pytest.warns(UserWarning, match="not honored alongside a rail that rewrites"):
-            async with started_iorails(config_dict) as engine:
-                assert engine.rails_manager.input_parallel is False
-                assert engine.rails_manager.output_parallel is False
-                assert engine.rails_manager.transform_flows[direction] == (flows[-1],)
+    async def test_parallel_checks_remain_enabled(self, config_dict, direction, flows):
+        async with started_iorails(config_dict) as engine:
+            assert getattr(engine.rails_manager, f"{direction.value.lower()}_parallel") is True
+            assert engine.rails_manager.transform_flows[direction] == (flows[-1],)
 
     async def test_the_input_rails_still_run_masking_first(self, call_log, httpx_mock):
-        """The downgraded config behaves exactly as the sequential one, rather than merely warning."""
-        with pytest.warns(UserWarning, match="not honored"):
-            with patch.dict("os.environ", {"NVIDIA_API_KEY": "test-key"}):
-                engine = IORails(RailsConfig.from_content(config=_input_pipeline_config(parallel=True)))
+        """The checks and model see the masked input even with parallel execution enabled."""
+        with patch.dict("os.environ", {"NVIDIA_API_KEY": "test-key"}):
+            engine = IORails(RailsConfig.from_content(config=_input_pipeline_config(parallel=True)))
 
         async with engine:
             _wire(engine, call_log, httpx_mock, ALL_ALLOW)
@@ -423,15 +419,15 @@ class TestParallelIsRefusedWhenARailRewrites:
 
     async def test_the_output_rails_still_run_masking_first(self, call_log, httpx_mock):
         """Same for the output direction, where the rewrite is the response the caller receives."""
-        with pytest.warns(UserWarning, match="not honored"):
-            with patch.dict("os.environ", {"NVIDIA_API_KEY": "test-key"}):
-                engine = IORails(RailsConfig.from_content(config=_output_pipeline_config(parallel=True)))
+        with patch.dict("os.environ", {"NVIDIA_API_KEY": "test-key"}):
+            engine = IORails(RailsConfig.from_content(config=_output_pipeline_config(parallel=True)))
 
         async with engine:
             _wire_answering(engine, call_log, httpx_mock, OUTPUT_ALL_ALLOW, MAIN_OUTPUT_WITH_PII)
             response = await engine.generate_async(messages=[{"role": "user", "content": USER_INPUT}])
 
-        assert call_log.order == [GLINER_RAIL, SELF_CHECK_RAIL, CONTENT_SAFETY_RAIL]
+        assert call_log.order[0] == GLINER_RAIL
+        assert set(call_log.order[1:]) == {SELF_CHECK_RAIL, CONTENT_SAFETY_RAIL}
         assert response == {"role": "assistant", "content": MASKED_MAIN_OUTPUT}
 
 

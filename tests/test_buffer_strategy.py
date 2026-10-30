@@ -51,6 +51,20 @@ async def short_streaming_handler():
         yield token
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("count", [0, 1, 2, 3, 4, 5])
+async def test_zero_context_processes_each_chunk_once(count):
+    async def stream():
+        for index in range(count):
+            yield str(index)
+
+    batches = [batch async for batch in RollingBuffer(buffer_context_size=0, buffer_chunk_size=2)(stream())]
+    expected = [str(index) for index in range(count)]
+    assert [chunk for batch in batches for chunk in batch.processing_context] == expected
+    assert [chunk for batch in batches for chunk in batch.user_output_chunks] == expected
+    assert all(batch.user_output_chunks for batch in batches)
+
+
 async def empty_streaming_handler():
     """Empty stream."""
     return

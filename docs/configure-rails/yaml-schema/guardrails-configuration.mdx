@@ -223,7 +223,8 @@ In `config.yml`, the IORails engine supports the following built-in safety flows
 - `topic safety check input`
 - `jailbreak detection model`
 
-When IORails is enabled and the configuration uses only supported flows, the engine runs them in parallel.
+IORails also supports catalog flows such as Presidio sensitive-data detection and masking, and Hugging Face classifier checks.
+Set `rails.input.parallel: True` or `rails.output.parallel: True` to run independent checks concurrently in that direction.
 Configurations that include custom flows, dialog rails, or other unsupported flows
 fall back to the LLMRails engine and emit a warning. Pass `require_iorails=True`
 to `Guardrails(...)` to raise a `ValueError` at initialization instead.
@@ -247,6 +248,21 @@ config = RailsConfig.from_path("./config")
 # parallel execution is actually in effect — the whole reason for opting in here.
 guardrails = Guardrails(config, use_iorails=True, require_iorails=True)
 ```
+
+#### Masking With Parallel Checks
+
+When a direction contains masking or other text-transforming rails, IORails runs those rails sequentially first, preserving their configured order.
+It then runs the remaining checks in parallel against the final masked text if that direction has `parallel: True`.
+Passing checks preserve the masked text; a blocking check prevents it from reaching the model or caller.
+Input and output parallel settings remain independent, so an output mask does not disable parallel input checks.
+
+Detection-only rails, including `detect sensitive data on input` and `detect sensitive data on output`, run with the other parallel checks.
+If there is no active transformation, all enabled checks in that direction can run concurrently.
+With one mask and one check, the check waits for the mask; concurrency improves latency when there are multiple independent checks afterward.
+
+Input masking disables speculative generation so that the main model receives the masked input.
+For streamed output masking, IORails buffers the complete response before applying masks and checks.
+See [Output Rail Streaming](/configure-guardrails/yaml-schema/streaming/output-rail-streaming) for the required settings and latency tradeoff.
 
 ### YAML-Based Parallel Execution
 
@@ -275,7 +291,8 @@ To enable parallel execution, set `parallel: True` in the `rails.input` and `rai
 
 <Note>
 
-Input rail mutations can lead to erroneous results during parallel execution because of race conditions arising from the execution order and timing of parallel operations. This can result in output divergence compared to sequential execution. For such cases, use sequential mode.
+For LLMRails, input rail mutations can lead to erroneous results during parallel execution because of race conditions arising from the execution order and timing of parallel operations. For such cases, use sequential mode.
+IORails handles declared text transformations by running them before parallel checks, as described above.
 
 </Note>
 
