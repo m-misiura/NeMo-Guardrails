@@ -170,6 +170,15 @@ dev = [
 package = true
 exclude-newer = "7 days"
 
+[tool.uv.pip]
+no-sources = true
+exclude-newer = false
+index-url = "https://packages.redhat.com/api/pypi/public-rhai/rhoai/3.6/cpu-ubi9/simple/"
+index-strategy = "first-index"
+python-platform = "linux"
+emit-index-annotation = true
+no-strip-markers = true
+
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
