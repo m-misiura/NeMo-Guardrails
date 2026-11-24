@@ -30,6 +30,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Trust checkout for Git-based tests
+        # Checkout's temporary Git config is not used by later shell steps.
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel
+
       - name: Install system dependencies
         run: |
           dnf install -y make gcc gcc-c++ curl-minimal tar gzip ca-certificates \
