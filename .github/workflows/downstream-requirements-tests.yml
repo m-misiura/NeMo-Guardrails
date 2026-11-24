@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   downstream-requirements-test:
-    name: UBI 9 / Python 3.12 / requirements.txt
+    name: UBI 9 / Python 3.12 / requirements-aipcc.txt
     runs-on: ubuntu-latest
     timeout-minutes: 45
     container:
@@ -65,7 +65,7 @@ jobs:
           # Allow transient Red Hat registry failures more time to recover.
           UV_HTTP_RETRIES: "8"
         run: |
-          uv pip install --python .venv/bin/python -r requirements.txt
+          uv pip install --python .venv/bin/python --require-hashes -r requirements-aipcc.txt
           uv pip freeze --python .venv/bin/python > "$RUNNER_TEMP/downstream-runtime-constraints.txt"
 
       - name: Export locked test dependencies

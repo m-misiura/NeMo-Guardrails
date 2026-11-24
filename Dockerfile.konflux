@@ -21,7 +21,7 @@ WORKDIR /app
 
 ARG GUARDRAILS_PROFILE=opensource
 
-COPY requirements.txt requirements-build.txt pyproject.toml README.md LICENSE* LICENCES* ./
+COPY requirements-aipcc.txt requirements-build.txt pyproject.toml README.md LICENSE* LICENCES* ./
 
 COPY nemoguardrails/ ./nemoguardrails/
 COPY scripts/ ./scripts/
@@ -53,7 +53,7 @@ RUN /opt/app-root/bin/python -m pip uninstall -y uv && \
 
 RUN python3 -m venv /app/.venv && \
     /app/.venv/bin/pip install --no-cache-dir -r requirements-build.txt && \
-    /app/.venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    /app/.venv/bin/pip install --no-cache-dir -r requirements-aipcc.txt && \
     /app/.venv/bin/pip install --no-cache-dir --no-deps /tmp/modelcars/en_core_web_lg-any-py3-none-any.whl && \
     mkdir -p nemoguardrails/examples && \
     cp -r examples/bots nemoguardrails/examples/bots && \
