@@ -23,6 +23,7 @@ jobs:
       # Use this checkout's environment and indexes, not the image's uv defaults.
       UV_CONFIG_FILE: /dev/null
       UV_NO_CACHE: "false"
+      UV_LINK_MODE: copy
       LD_LIBRARY_PATH: /opt/openmpi/lib
     steps:
       - uses: actions/checkout@v7.0.0
@@ -68,21 +69,24 @@ jobs:
           uv pip install --python .venv/bin/python --require-hashes -r requirements-aipcc.txt
           uv pip freeze --python .venv/bin/python > "$RUNNER_TEMP/downstream-runtime-constraints.txt"
 
-      - name: Export locked test dependencies
+      - name: Resolve test dependencies against downstream runtime
         run: |
-          # Keep packages already supplied by the downstream runtime out of the export.
+          # Keep packages already supplied by the downstream runtime out of the test requirements.
           runtime_exclusions=()
           while IFS='=' read -r package _; do
             runtime_exclusions+=(--no-emit-package "$package")
           done < "$RUNNER_TEMP/downstream-runtime-constraints.txt"
-          env -u UV_CONFIG_FILE uv export --locked --only-group test --only-group test_integration \
-            --no-emit-project "${runtime_exclusions[@]}" \
+          # uv.lock was resolved against different runtime versions.
+          uv pip compile --group test --group test_integration \
+            --python .venv/bin/python --no-sources --prerelease=if-necessary \
+            --constraint "$RUNNER_TEMP/downstream-runtime-constraints.txt" \
+            --generate-hashes "${runtime_exclusions[@]}" \
             --output-file "$RUNNER_TEMP/downstream-test-requirements.txt" > /dev/null
 
-      - name: Install locked test dependencies and package
+      - name: Install resolved test dependencies and package
         run: |
-          # The export includes transitive dependencies; do not resolve new ones.
-          uv pip install --python .venv/bin/python --no-deps --no-sources \
+          # Install the resolved test-only graph without replacing runtime packages.
+          uv pip install --python .venv/bin/python --no-deps --no-sources --require-hashes \
             --requirement "$RUNNER_TEMP/downstream-test-requirements.txt" \
             --constraint "$RUNNER_TEMP/downstream-runtime-constraints.txt"
           uv pip install --python .venv/bin/python --no-deps -e .
