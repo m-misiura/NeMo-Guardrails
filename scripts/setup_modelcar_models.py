@@ -147,7 +147,7 @@ def main() -> None:
 
     install_hf_model(
         MODELCAR_DIR / "snowflake",
-        "RedHatAI/snowflake-arctic-embed-m-long",
+        "Snowflake/snowflake-arctic-embed-m-long",
         os.environ["HF_HOME"],
         use_hub=True,
     )

@@ -18,7 +18,7 @@ from typing import Tuple
 
 import numpy as np
 
-SNOWFLAKE_MODEL_ID = "RedHatAI/snowflake-arctic-embed-m-long"
+SNOWFLAKE_MODEL_ID = "Snowflake/snowflake-arctic-embed-m-long"
 
 
 class SnowflakeEmbed:
