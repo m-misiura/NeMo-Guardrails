@@ -63,6 +63,7 @@ from nemoguardrails.guardrails.guardrails_types import (
     serialize_prompt,
     truncate,
 )
+from nemoguardrails.guardrails.local_execution import LocalExecution
 from nemoguardrails.guardrails.model_engine import _parse_tools_openai
 from nemoguardrails.guardrails.rails_manager import RailsManager
 from nemoguardrails.guardrails.telemetry import (
@@ -898,8 +899,17 @@ class IORails(BaseGuardrails):
             metrics_enabled=self._metrics_enabled,
             content_capture_enabled=self._content_capture_enabled,
         )
+        local_capacity = sum(
+            classifier.num_instances
+            for classifier in (config.rails.config.hf_classifier or {}).values()
+            if classifier.engine == "local"
+        )
+        self._local_executor = LocalExecution(
+            max_queue_size=NONSTREAM_QUEUE_DEPTH, max_concurrency=max(1, local_capacity)
+        )
         self.rails_manager = RailsManager(
             engine_registry=self.engine_registry,
+            local_executor=self._local_executor,
             task_manager=LLMTaskManager(config),
             input_flows=config.rails.input.flows,
             output_flows=config.rails.output.flows,
@@ -999,6 +1009,8 @@ class IORails(BaseGuardrails):
         self._owned_components.add("registry")
         try:
             await self.engine_registry.start()
+            self._owned_components.add("local_executor")
+            await self._local_executor.start()
             self._owned_components.add("queue")
             await self._generate_async_queue.start()
             # Queue is now live; register the state-observing ObservableGauges.
@@ -1031,6 +1043,7 @@ class IORails(BaseGuardrails):
         failure: BaseException | None = None
         for name, stop in (
             ("queue", self._generate_async_queue.stop),
+            ("local_executor", self._local_executor.stop),
             ("rails", self.rails_manager.stop),
             ("registry", self.engine_registry.stop),
         ):

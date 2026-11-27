@@ -22,6 +22,7 @@ from nemoguardrails.actions import action
 from nemoguardrails.actions.rail_outcome import RailOutcome, TransformTarget
 from nemoguardrails.http import HTTPClient
 from nemoguardrails.library.hf_classifier.backends import get_backend
+from nemoguardrails.local_execution import LocalExecutor
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ async def _classify_and_check(
     text: str,
     config: Any | None,
     http_client: HTTPClient | None = None,
+    local_executor: LocalExecutor | None = None,
 ) -> bool:
     """Classify *text* and check against blocked labels.
 
@@ -50,7 +52,9 @@ async def _classify_and_check(
     if not text:
         return True
 
-    backend = get_backend(classifier_config, name=classifier_name, http_client=http_client)
+    backend = get_backend(
+        classifier_config, name=classifier_name, http_client=http_client, local_executor=local_executor
+    )
     results = await backend.classify(text)
 
     if text and not results and getattr(classifier_config, "task", None) == "text-classification":
@@ -103,10 +107,11 @@ async def hf_classifier_check_input(
     context: Optional[dict] = None,
     text: Optional[str] = None,
     http_client: HTTPClient | None = None,
+    local_executor: LocalExecutor | None = None,
     **kwargs,
 ) -> RailOutcome:
     text = text if text is not None else _extract_text(context, "user_message")
-    allowed = await _classify_and_check(classifier, text, config, http_client)
+    allowed = await _classify_and_check(classifier, text, config, http_client, local_executor)
     return _hf_classifier_outcome(allowed)
 
 
@@ -118,6 +123,7 @@ async def hf_classifier_check_output(
     model_name: Optional[str] = None,
     text: Optional[str] = None,
     http_client: HTTPClient | None = None,
+    local_executor: LocalExecutor | None = None,
     **kwargs,
 ) -> RailOutcome:
     # Streaming output rail path doesn't resolve flow variables — $classifier
@@ -126,7 +132,7 @@ async def hf_classifier_check_output(
     if classifier.startswith("$") and model_name:
         classifier = model_name
     text = text if text is not None else _extract_text(context, "bot_message")
-    allowed = await _classify_and_check(classifier, text, config, http_client)
+    allowed = await _classify_and_check(classifier, text, config, http_client, local_executor)
     return _hf_classifier_outcome(allowed)
 
 
@@ -137,8 +143,9 @@ async def hf_classifier_check_retrieval(
     context: Optional[dict] = None,
     text: Optional[str] = None,
     http_client: HTTPClient | None = None,
+    local_executor: LocalExecutor | None = None,
     **kwargs,
 ) -> RailOutcome:
     text = text if text is not None else _extract_text(context, "relevant_chunks")
-    allowed = await _classify_and_check(classifier, text, config, http_client)
+    allowed = await _classify_and_check(classifier, text, config, http_client, local_executor)
     return _hf_classifier_retrieval_outcome(allowed)

@@ -60,6 +60,13 @@ class LocalHFClassifierConfig(_HFClassifierBase):
     """Configuration for a local HuggingFace Transformers pipeline classifier."""
 
     engine: Literal["local"] = "local"
+    num_instances: int = Field(
+        default=1,
+        ge=1,
+        strict=True,
+        description="Maximum independent local model/tokenizer instances in the shared pool. "
+        "Each instance requires its own model memory; increase only after measuring your hardware.",
+    )
     task: Literal["text-classification", "token-classification"] = Field(
         default="text-classification",
         description="HuggingFace pipeline task type.",
@@ -73,6 +80,9 @@ class LocalHFClassifierConfig(_HFClassifierBase):
 
     @model_validator(mode="after")
     def _validate_local(self) -> "LocalHFClassifierConfig":
+        tokenizer = self.parameters.get("tokenizer")
+        if self.num_instances > 1 and tokenizer is not None and not isinstance(tokenizer, str):
+            raise ValueError("Multiple instances require a tokenizer name or path, not a shared tokenizer object.")
         agg = self.parameters.get("aggregation_strategy")
         if agg and self.task != "token-classification":
             raise ValueError("aggregation_strategy is only valid when task is 'token-classification'.")

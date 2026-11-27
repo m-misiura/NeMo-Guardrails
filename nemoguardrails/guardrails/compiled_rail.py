@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from opentelemetry.trace import Tracer
 
     from nemoguardrails.http import HTTPClient
+    from nemoguardrails.local_execution import LocalExecutor
     from nemoguardrails.logging.explain import LLMCallInfo
     from nemoguardrails.manifests import RailCatalog
 
@@ -81,6 +82,7 @@ class RailDependencies:
     model_caches: Optional[Mapping[str, Any]] = None
     http_client: Optional["HTTPClient"] = None
     tracer: Optional["Tracer"] = None
+    local_executor: Optional["LocalExecutor"] = None
 
 
 @dataclass(frozen=True)
@@ -306,6 +308,7 @@ class CompiledRail:
             "llm_task_manager": self._deps.llm_task_manager,
             "config": self._deps.config,
             "http_client": self._deps.http_client,
+            "local_executor": self._deps.local_executor,
             "model_caches": self._deps.model_caches,
             "events": messages_to_events(messages),
         }

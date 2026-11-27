@@ -22,6 +22,7 @@ tests that need to observe state transitions mid-flight.
 """
 
 import asyncio
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 from unittest.mock import AsyncMock, patch
@@ -55,6 +56,13 @@ async def started_iorails(config_dict: dict) -> AsyncIterator[IORails]:
         iorails = IORails(RailsConfig.from_content(config=config_dict))
     async with iorails:
         yield iorails
+
+
+async def wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
+    """Yield until a state transition is observable, with a bounded wait."""
+    async with asyncio.timeout(timeout):
+        while not predicate():
+            await asyncio.sleep(0)
 
 
 async def wait_for_queue_state(

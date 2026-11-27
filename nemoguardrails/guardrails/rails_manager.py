@@ -65,6 +65,7 @@ from nemoguardrails.types import ToolCall, UsageInfo
 if TYPE_CHECKING:
     from opentelemetry.trace import Tracer
 
+    from nemoguardrails.local_execution import LocalExecutor
     from nemoguardrails.logging.explain import LLMCallInfo
 
 log = logging.getLogger(__name__)
@@ -365,6 +366,7 @@ class RailsManager:
         per_tool_result_flows: Optional[dict[str, list[str]]] = None,
         tracer: Optional["Tracer"] = None,
         content_capture_enabled: bool = False,
+        local_executor: Optional["LocalExecutor"] = None,
     ) -> None:
         """Compile a manifest-driven rail for each configured input and output flow."""
         # Both telemetry settings are no-ops without a tracer: the span helpers do nothing, and
@@ -435,7 +437,7 @@ class RailsManager:
             self._disable_tool_parallel_execution()
 
         self._http_client = create_http_client()
-        runtime_deps = replace(deps, http_client=self._http_client)
+        runtime_deps = replace(deps, http_client=self._http_client, local_executor=local_executor)
         self._rails = {key: rail.with_runtime_dependencies(runtime_deps) for key, rail in self._rails.items()}
         self._per_tool_rails = {
             key: rail.with_runtime_dependencies(runtime_deps) for key, rail in self._per_tool_rails.items()

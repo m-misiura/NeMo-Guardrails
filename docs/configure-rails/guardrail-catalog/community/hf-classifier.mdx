@@ -117,6 +117,7 @@ For remote servers, send a test request and inspect the response.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `task` | string | `text-classification` | Pipeline task type. Use `token-classification` for NER models. |
+| `num_instances` | integer | `1` | Positive maximum number of independent model/tokenizer copies in the local pool. Each copy needs its own model memory. |
 | `parameters` | dict | `{}` | Kwargs forwarded to `transformers.pipeline()`. |
 | `parameters.max_windows` | integer | `128` | Positive maximum number of automatic text-classification windows per input. Inputs exceeding the budget raise an error before inference. Does not apply to token classification or explicit truncation. |
 
@@ -179,9 +180,62 @@ initial tokenization still reads the full input and allocates storage proportion
 its length. Apply a request-size limit before invoking the rail when you also need to
 bound tokenization work and memory.
 
-Calls sharing the cached text pipeline are serialized to avoid tokenizer races, including
-short inputs. The window cap limits inference work per call, but does not guarantee latency;
-choose a budget appropriate to your model, hardware, and serving requirements.
+Each local pipeline is exclusively leased for the whole classification call, including
+tokenization and every inference window. This applies to both text and token classification
+through IORails, LLMRails, and direct backend callers.
+
+To enable concurrent local inference, set `num_instances: 2` alongside `model`, outside
+`parameters`. The default is one instance. Extra copies load lazily when simultaneous
+requests need them; sequential requests reuse an available copy. Each copy has its own
+model and tokenizer. Cold construction is serialized because Hugging Face loaders can
+modify process-wide initialization state; inference across loaded copies runs concurrently.
+With multiple instances, `parameters.tokenizer`, when supplied, must
+be a tokenizer name or path, not a preconstructed tokenizer object.
+
+```yaml
+rails:
+  config:
+    hf_classifier:
+      hap:
+        engine: local
+        model: ibm-granite/granite-guardian-hap-38m
+        task: text-classification
+        num_instances: 2
+        blocked_labels: [LABEL_1]
+        parameters:
+          device: cpu
+  input:
+    flows:
+      - hf classifier check input $classifier=hap
+```
+
+Pools are cached per process by model, task, inference parameters, and `num_instances`.
+Different classifier names or blocking thresholds can share a pool. Different capacities
+create separate pools and model copies. Loaded copies retain the existing process-cache
+lifetime. Failed instance loads retain the existing cached-error behavior; requests that
+lease that instance fail without automatically retrying the load.
+
+IORails runs local classifiers in a dedicated executor with a bounded admission queue.
+Its worker limit is the sum of `num_instances` across configured local classifiers;
+shared pools still enforce their own instance limits. This keeps waiting classifier calls out of the
+event loop's default executor. A full local queue produces a rail failure, not an allow decision.
+Cancelling a request does not interrupt inference already running in a thread; shutdown
+drains that work before releasing the executor. The pipeline lease remains held until
+physical work finishes, even if its caller is cancelled. Stopping an IORails instance
+does not clear shared pools. LLMRails and direct callers retain their
+existing default-executor path when no execution dependency is supplied.
+
+Measure throughput, tail latency, and peak memory before increasing the pool size. CPU
+parallelism depends on available cores and PyTorch thread settings. GPU copies consume
+additional VRAM and are not guaranteed to improve throughput. The library does not change
+global PyTorch thread settings or enable cross-request batching. Small floating-point
+differences between independent executions can matter near a classification threshold.
+
+The window cap limits inference work per call, but does not guarantee latency or bound
+the total size of queued text. A short request can still wait behind a long inference.
+Choose a budget appropriate to your model, hardware, and serving requirements, and measure
+throughput and tail latency with your actual workload. Each server process or replica has
+its own pipelines and execution resources.
 Unsupported tokenizers, invalid settings and inference failures still raise errors.
 Remote backends retain their server's input-length behavior.
 

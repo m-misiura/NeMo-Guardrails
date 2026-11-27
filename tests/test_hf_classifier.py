@@ -1672,3 +1672,65 @@ class TestLocalPipeline:
         results = await asyncio.gather(*(backend.classify(text) for _ in range(4) for text in texts))
         assert results == expected * 4
         assert chunked.tokenizer.model_max_length == 16
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("classifiers", ["text-classification", "token-classification"], indirect=True)
+    async def test_real_pool_loads_independent_models_and_tokenizers(self, classifiers, tmp_path, monkeypatch):
+        original, _ = classifiers
+        model_path = tmp_path / "replicated"
+        original.save_pretrained(model_path)
+        cfg = RailsConfig.from_content(
+            config={
+                "rails": {
+                    "config": {
+                        "hf_classifier": {
+                            "test": {
+                                "engine": "local",
+                                "model": str(model_path),
+                                "task": original.task,
+                                "num_instances": 2,
+                                "parameters": {"device": "cpu"},
+                            }
+                        }
+                    }
+                }
+            }
+        ).rails.config.hf_classifier["test"]
+        factory = self.transformers.pipeline
+        loaded = []
+        entered = threading.Barrier(2)
+
+        def create(**kwargs):
+            pipe = factory(**kwargs)
+            forward = pipe._forward
+            loaded.append((pipe, forward))
+
+            def infer(inputs, **options):
+                entered.wait(timeout=10)
+                return forward(inputs, **options)
+
+            monkeypatch.setattr(pipe, "_forward", infer)
+            return pipe
+
+        monkeypatch.setattr(self.transformers, "pipeline", create)
+        backend = backends_mod.LocalBackend(cfg)
+        outputs = await asyncio.wait_for(asyncio.gather(backend.classify("w0"), backend.classify("w0")), 20)
+        assert len(loaded) == 2
+        first, second = (entry[0] for entry in loaded)
+        assert first.model is not second.model
+        assert first.tokenizer is not second.tokenizer
+        assert next(first.model.parameters()).data_ptr() != next(second.model.parameters()).data_ptr()
+        for result, reference in zip(outputs[0], outputs[1]):
+            assert result == pytest.approx(reference)
+        for pipe, forward in loaded:
+            monkeypatch.setattr(pipe, "_forward", forward)
+        texts = ["w0", " ".join(["w1"] * 60)]
+        expected = [await backend.classify(text) for text in texts]
+        actual = await asyncio.wait_for(
+            asyncio.gather(*(backend.classify(text) for _ in range(3) for text in texts)), 20
+        )
+        assert len(actual) == 6
+        for result, reference in zip(actual, expected * 3):
+            assert len(result) == len(reference)
+            for score, expected_score in zip(result, reference):
+                assert score == pytest.approx(expected_score)

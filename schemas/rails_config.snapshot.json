@@ -751,6 +751,13 @@
           "title": "Model",
           "type": "string"
         },
+        "num_instances": {
+          "default": 1,
+          "description": "Maximum independent local model/tokenizer instances in the shared pool. Each instance requires its own model memory; increase only after measuring your hardware.",
+          "minimum": 1,
+          "title": "Num Instances",
+          "type": "integer"
+        },
         "parameters": {
           "additionalProperties": true,
           "description": "Forwarded as kwargs to transformers.pipeline() (e.g. device, dtype, trust_remote_code, token, revision, aggregation_strategy).",

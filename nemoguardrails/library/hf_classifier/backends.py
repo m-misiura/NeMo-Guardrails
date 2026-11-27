@@ -22,7 +22,10 @@ import asyncio
 import json
 import logging
 import os
+import queue
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, TypedDict
 
 from nemoguardrails.http import (
@@ -34,6 +37,7 @@ from nemoguardrails.http import (
     http_call,
 )
 from nemoguardrails.http.composition import ensure_retrying_http_client
+from nemoguardrails.local_execution import LocalExecutor
 
 if TYPE_CHECKING:
     from nemoguardrails.rails.llm.config import (
@@ -139,6 +143,7 @@ def _build_ssl_config(config: RemoteHFClassifierConfig) -> HTTPTLSConfig:
 
 _pipelines: Dict[str, Any] = {}
 _pipelines_lock = threading.Lock()
+_pipeline_creation_lock = threading.Lock()
 _HTTP_ONLY_PARAMS = frozenset(
     {
         "timeout",
@@ -206,8 +211,12 @@ def _get_or_create_pipeline(
     model_name: str,
     task: Literal["text-classification", "token-classification"],
     parameters: Dict[str, Any],
+    num_instances: int = 1,
+    instance: int = 0,
 ) -> Any:
     cache_key = _pipeline_cache_key(model_name, task, parameters)
+    if num_instances > 1:
+        cache_key = f"replica:{num_instances}:{instance}:{cache_key}"
 
     hit = _check_cached(cache_key, model_name)
     if hit is not None:
@@ -246,7 +255,10 @@ def _get_or_create_pipeline(
             from nemoguardrails.library.hf_classifier.chunking import ChunkedTextClassificationPipeline
 
             kwargs.setdefault("pipeline_class", ChunkedTextClassificationPipeline)
-        pipe = pipeline(task=task, model=model_name, **kwargs)
+        # HF loaders can temporarily modify process-wide initialization state.
+        # Serialize construction only; independent pipelines still infer in parallel.
+        with _pipeline_creation_lock:
+            pipe = pipeline(task=task, model=model_name, **kwargs)
     except BaseException as exc:
         loading.error = exc
         loading.ready.set()
@@ -273,6 +285,33 @@ def _get_or_create_pipeline(
     return pipe
 
 
+class _PipelinePool:
+    """Process-local leases, independent of caller event loops and runtime lifetimes."""
+
+    def __init__(self, size: int) -> None:
+        self._available: queue.LifoQueue[int] = queue.LifoQueue(maxsize=size)
+        for instance in reversed(range(size)):
+            self._available.put_nowait(instance)
+
+    @contextmanager
+    def acquire(self) -> Iterator[int]:
+        instance = self._available.get()
+        try:
+            yield instance
+        finally:
+            self._available.put_nowait(instance)
+
+
+def _get_pipeline_pool(config: LocalHFClassifierConfig) -> _PipelinePool:
+    key = f"pool:{config.num_instances}:{_pipeline_cache_key(config.model, config.task, config.parameters)}"
+    with _pipelines_lock:
+        pool = _pipelines.get(key)
+        if pool is None:
+            pool = _PipelinePool(config.num_instances)
+            _pipelines[key] = pool
+        return pool
+
+
 class LocalBackend(ClassifierBackend):
     """Local HF Transformers pipeline backend.
 
@@ -280,21 +319,28 @@ class LocalBackend(ClassifierBackend):
     ``text-classification`` and ``token-classification`` tasks.
     """
 
-    def __init__(self, config: LocalHFClassifierConfig) -> None:
+    def __init__(self, config: LocalHFClassifierConfig, local_executor: LocalExecutor | None = None) -> None:
         self._config = config
+        self._local_executor = local_executor
 
     async def classify(self, text: str) -> List[ClassificationResult]:
-        loop = asyncio.get_running_loop()
-
         def _run():
-            pipe = _get_or_create_pipeline(
-                self._config.model,
-                self._config.task,
-                self._config.parameters,
-            )
-            return pipe(text)
+            # Acquire and release in the physical worker, not the cancellable awaiter.
+            with _get_pipeline_pool(self._config).acquire() as instance:
+                pipe = _get_or_create_pipeline(
+                    self._config.model,
+                    self._config.task,
+                    self._config.parameters,
+                    self._config.num_instances,
+                    instance,
+                )
+                return pipe(text)
 
-        raw = await loop.run_in_executor(None, _run)
+        raw = (
+            await self._local_executor.run(_run)
+            if self._local_executor is not None
+            else await asyncio.get_running_loop().run_in_executor(None, _run)
+        )
 
         # Transformers may wrap results in an extra list for single-text input
         if raw and isinstance(raw[0], list):
@@ -510,11 +556,14 @@ def get_backend(
     config: HFClassifierConfig,
     name: str = "",
     http_client: HTTPClient | None = None,
+    local_executor: LocalExecutor | None = None,
 ) -> ClassifierBackend:
-    """Get or create a cached backend instance from classifier config."""
+    """Cache standalone backends; injected runtime resources stay caller-owned."""
     cls = _BACKENDS.get(config.engine)
     if cls is None:
         raise ValueError(f"Unknown hf_classifier engine: '{config.engine}'. Supported: {', '.join(_BACKENDS)}")
+    if config.engine == "local" and local_executor is not None:
+        return LocalBackend(config, local_executor=local_executor)
     if http_client is not None and config.engine != "local":
         return cls(config, http_client=http_client)
     if http_client is not None:
